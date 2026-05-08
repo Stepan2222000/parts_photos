@@ -34,15 +34,29 @@
 
 .queue { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
 .q {
-  display: flex; align-items: center; gap: 12px;
+  display: flex; flex-direction: column; gap: 6px;
   padding: 8px 12px;
   background: var(--bg-pill);
   border: 1px solid var(--border);
   border-radius: 8px;
   font-size: 12.5px;
 }
+.qMain { display: flex; align-items: center; gap: 12px; }
 .qName { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-strong); }
-.qBar { width: 120px; height: 4px; background: var(--hover-strong); border-radius: 2px; overflow: hidden; }
+.qBar { width: 120px; height: 4px; background: var(--hover-strong); border-radius: 2px; overflow: hidden; flex-shrink: 0; }
 .qBarInner { height: 100%; background: var(--brand-coral); transition: width 150ms ease; }
 .qStatus { font-size: 11px; color: var(--text-muted); min-width: 70px; text-align: right; }
 .qFailed { color: var(--error-product); }
+.qErr {
+  font-size: 11.5px;
+  color: var(--error-product);
+  word-break: break-word;
+  font-family: var(--font-mono);
+  line-height: 1.4;
+  padding-top: 4px;
+  border-top: 1px dashed rgba(191,77,67,0.25);
+}
+@media (max-width: 640px) {
+  .qBar { width: 60px; }
+  .qStatus { min-width: 56px; }
+}

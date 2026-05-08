@@ -144,16 +144,21 @@ export default function Uploader({ collageId }: Props) {
         <div className={s.queue}>
           {queue.map((it) => (
             <div key={it.key} className={s.q}>
-              <span className={s.qName}>{it.name}</span>
-              <div className={s.qBar}>
-                <div className={s.qBarInner} style={{ width: `${it.progress}%` }} />
+              <div className={s.qMain}>
+                <span className={s.qName}>{it.name}</span>
+                <div className={s.qBar}>
+                  <div className={s.qBarInner} style={{ width: `${it.progress}%` }} />
+                </div>
+                <span className={`${s.qStatus} ${it.status === "error" ? s.qFailed : ""}`}>
+                  {it.status === "queued" && "ожидает"}
+                  {it.status === "uploading" && `${Math.round(it.progress)}%`}
+                  {it.status === "done" && "готово"}
+                  {it.status === "error" && "ошибка"}
+                </span>
               </div>
-              <span className={`${s.qStatus} ${it.status === "error" ? s.qFailed : ""}`}>
-                {it.status === "queued" && "ожидает"}
-                {it.status === "uploading" && `${Math.round(it.progress)}%`}
-                {it.status === "done" && "готово"}
-                {it.status === "error" && "ошибка"}
-              </span>
+              {it.status === "error" && it.error && (
+                <div className={s.qErr}>{it.error}</div>
+              )}
             </div>
           ))}
         </div>

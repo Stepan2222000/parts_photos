@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, HTTPException, UploadFile
@@ -9,6 +10,7 @@ from ..images import InvalidImage, to_jpeg
 from ..minio_client import public_url, put_jpeg
 from ..models import Photo, PositionUpdate
 
+logger = logging.getLogger("photos.upload")
 router = APIRouter(tags=["photos"])
 
 
@@ -29,7 +31,14 @@ async def upload_photo(collage_id: UUID, file: UploadFile) -> Photo:
     try:
         jpeg = to_jpeg(raw, source_mime)
     except InvalidImage as e:
-        raise HTTPException(400, str(e)) from e
+        logger.warning(
+            "upload decode failed: name=%r mime=%r size=%d magic=%r err=%s",
+            file.filename, source_mime, len(raw), raw[:16].hex(), e,
+        )
+        raise HTTPException(
+            400,
+            f"{e} | filename={file.filename!r} size={len(raw)} magic={raw[:16].hex()}",
+        ) from e
 
     photo_id = uuid4()
     s3_key = f"groups/{group_id}/collages/{collage_id}/{photo_id}.jpg"
