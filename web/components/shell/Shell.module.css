@@ -1,0 +1,23 @@
+.shell { display: grid; grid-template-columns: 256px 1fr; min-height: 100vh; }
+.main { display: flex; flex-direction: column; min-width: 0; }
+.topbar {
+  height: 56px; padding: 0 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 14px;
+  position: sticky; top: 0; background: var(--bg-page);
+  z-index: 5;
+}
+.crumbs {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; color: var(--text-muted);
+}
+.crumbs .sep { color: var(--text-vfaint); }
+.crumbs .here { color: var(--text-strong); }
+.spacer { flex: 1; }
+.content { padding: 32px 24px 64px; max-width: 1280px; }
+
+@media (max-width: 720px) {
+  .shell { grid-template-columns: 1fr; }
+  .topbar { padding: 0 14px; gap: 8px; height: 50px; }
+  .content { padding: 22px 14px 48px; }
+}

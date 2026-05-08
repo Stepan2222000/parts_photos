@@ -1,0 +1,48 @@
+.zone {
+  margin-top: 18px;
+  border: 1.5px dashed var(--border);
+  border-radius: 12px;
+  padding: 32px 20px;
+  text-align: center;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+.zone.over {
+  border-color: var(--brand-coral);
+  background: rgba(204,120,92,0.05);
+}
+.title {
+  font-family: var(--font-serif);
+  font-size: 17px; color: var(--text-strong);
+  letter-spacing: -0.2px;
+}
+.sub { font-size: 12.5px; color: var(--text-muted); margin-top: 4px; }
+.row { display: flex; gap: 8px; justify-content: center; margin-top: 14px; flex-wrap: wrap; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  height: 36px; padding: 0 14px;
+  background: transparent;
+  color: var(--text-body);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-weight: 500; font-size: 13.5px;
+  cursor: pointer;
+}
+.btn:hover { background: var(--hover); color: var(--text-strong); }
+.btn svg { width: 14px; height: 14px; }
+.btn input { display: none; }
+
+.queue { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+.q {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 12px;
+  background: var(--bg-pill);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+.qName { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-strong); }
+.qBar { width: 120px; height: 4px; background: var(--hover-strong); border-radius: 2px; overflow: hidden; }
+.qBarInner { height: 100%; background: var(--brand-coral); transition: width 150ms ease; }
+.qStatus { font-size: 11px; color: var(--text-muted); min-width: 70px; text-align: right; }
+.qFailed { color: var(--error-product); }

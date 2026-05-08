@@ -1,0 +1,1097 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Photos · admin mockup</title>
+  <link rel="stylesheet" href="../.claude/skills/warm-editorial-design/colors_and_type.css" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--product-bg); color: var(--on-dark); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
+    a { color: inherit; text-decoration: none; }
+
+    /* ───────────── shell layout ───────────── */
+    .screen {
+      display: grid;
+      grid-template-columns: 256px 1fr;
+      min-height: 100vh;
+      width: 100%;
+    }
+    .screen + .screen { border-top: 8px solid #0e0d0c; }
+
+    /* ───────────── sidebar ───────────── */
+    .sidebar {
+      background: var(--product-sidebar);
+      border-right: 1px solid var(--product-stroke);
+      display: flex;
+      flex-direction: column;
+      padding: 12px 8px;
+      gap: 2px;
+      position: sticky;
+      top: 0;
+      align-self: start;
+      max-height: 100vh;
+      overflow-y: auto;
+    }
+    .sb-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 8px 6px;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--font-serif);
+      font-weight: 500;
+      font-size: 19px;
+      letter-spacing: -0.4px;
+      color: #fff;
+    }
+    .logo .dot {
+      width: 14px; height: 14px; color: var(--brand-coral);
+    }
+    .iconbtn {
+      width: 30px; height: 30px;
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 6px;
+      background: transparent;
+      color: rgba(255,255,255,0.6);
+      border: none; cursor: pointer;
+    }
+    .iconbtn:hover { background: rgba(255,255,255,0.06); color: #fff; }
+    .iconbtn svg { width: 16px; height: 16px; }
+
+    .sb-cta {
+      display: flex; align-items: center; gap: 8px;
+      height: 34px; padding: 0 12px;
+      margin: 6px 0 4px;
+      background: var(--brand-coral-soft);
+      color: var(--brand-coral);
+      border-radius: 8px;
+      font-weight: 500; font-size: 13.5px;
+      cursor: pointer; border: none;
+    }
+    .sb-cta:hover { background: rgba(204,120,92,0.18); }
+    .sb-cta svg { width: 14px; height: 14px; }
+
+    .sb-label {
+      padding: 14px 10px 6px;
+      font-size: 11px; font-weight: 500;
+      color: rgba(255,255,255,0.4);
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+    }
+    .sb-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      color: rgba(255,255,255,0.78);
+      font-size: 13.5px;
+      cursor: pointer; border: none; background: transparent;
+      width: 100%; text-align: left;
+      font-family: var(--font-sans);
+    }
+    .sb-item:hover { background: rgba(255,255,255,0.05); color: #fff; }
+    .sb-item.active { background: rgba(255,255,255,0.08); color: #fff; }
+    .sb-item .ico { width: 16px; height: 16px; opacity: 0.7; flex-shrink: 0; }
+    .sb-item .ico svg { width: 100%; height: 100%; }
+    .sb-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sb-item .count {
+      font-size: 11px;
+      color: rgba(255,255,255,0.4);
+      font-variant-numeric: tabular-nums;
+    }
+    .sb-item .star {
+      width: 11px; height: 11px;
+      color: var(--brand-coral);
+    }
+
+    .sb-spacer { flex: 1; }
+
+    .acct {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 8px;
+      border-top: 1px solid var(--product-stroke);
+      margin-top: 8px;
+    }
+    .av {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: var(--brand-coral); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 500; font-size: 12px;
+    }
+    .acct-name { font-size: 13px; color: #fff; font-weight: 500; line-height: 1.2; }
+    .acct-sub { font-size: 11px; color: rgba(255,255,255,0.5); }
+
+    /* ───────────── main column ───────────── */
+    .main {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .topbar {
+      height: 56px;
+      border-bottom: 1px solid var(--product-stroke);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 24px;
+      position: sticky;
+      top: 0;
+      background: var(--product-bg);
+      z-index: 5;
+    }
+    .crumbs {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 13px;
+      color: rgba(255,255,255,0.6);
+      font-family: var(--font-sans);
+    }
+    .crumbs .sep { color: rgba(255,255,255,0.25); }
+    .crumbs .here { color: #fff; }
+
+    .tb-spacer { flex: 1; }
+
+    .search {
+      display: flex; align-items: center; gap: 8px;
+      height: 32px;
+      padding: 0 12px;
+      background: var(--product-input);
+      border: 1px solid var(--product-input-border);
+      border-radius: 8px;
+      min-width: 280px;
+    }
+    .search:focus-within { border-color: rgba(204,120,92,0.45); }
+    .search svg { width: 14px; height: 14px; color: rgba(255,255,255,0.5); }
+    .search input {
+      background: transparent; border: none; outline: none;
+      color: #fff;
+      font-family: var(--font-sans);
+      font-size: 13px;
+      width: 100%;
+    }
+    .search input::placeholder { color: rgba(255,255,255,0.4); }
+    .search kbd {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: rgba(255,255,255,0.5);
+      background: rgba(255,255,255,0.06);
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+
+    .pill-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      height: 32px; padding: 0 12px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--product-stroke);
+      color: rgba(255,255,255,0.78);
+      font-family: var(--font-sans);
+      font-size: 12.5px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .pill-btn:hover { background: rgba(255,255,255,0.07); color: #fff; }
+    .pill-btn svg { width: 14px; height: 14px; }
+
+    /* ───────────── content ───────────── */
+    .content {
+      padding: 32px 24px 64px;
+      max-width: 1280px;
+    }
+    .display { font-family: var(--font-serif); font-weight: 400; color: #fff; letter-spacing: -0.6px; }
+    .display-md { font-size: 36px; line-height: 1.1; }
+    .display-sm { font-size: 26px; line-height: 1.2; letter-spacing: -0.4px; }
+    .sub {
+      color: rgba(255,255,255,0.55);
+      font-size: 14px;
+      line-height: 1.55;
+      margin-top: 8px;
+      max-width: 620px;
+    }
+
+    .stat-row {
+      display: flex; flex-wrap: wrap; gap: 18px;
+      margin-top: 22px;
+      align-items: baseline;
+      color: rgba(255,255,255,0.55);
+      font-size: 13px;
+    }
+    .stat-row .num { color: #fff; font-weight: 500; font-variant-numeric: tabular-nums; margin-right: 4px; }
+    .stat-row .dot { color: rgba(255,255,255,0.25); }
+
+    /* tabs */
+    .tabs {
+      display: flex; gap: 4px;
+      margin-top: 24px;
+      border-bottom: 1px solid var(--product-stroke);
+    }
+    .tab {
+      padding: 10px 14px;
+      font-size: 13px;
+      color: rgba(255,255,255,0.55);
+      cursor: pointer;
+      border: none; background: transparent;
+      font-family: var(--font-sans);
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+    .tab:hover { color: #fff; }
+    .tab.active { color: #fff; border-bottom-color: var(--brand-coral); }
+    .tab .badge {
+      font-size: 11px;
+      color: rgba(255,255,255,0.45);
+      margin-left: 6px;
+      font-variant-numeric: tabular-nums;
+    }
+    .tab.active .badge { color: rgba(255,255,255,0.7); }
+
+    /* collage grid */
+    .collage-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 22px;
+    }
+    @media (max-width: 1100px) { .collage-grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 800px)  { .collage-grid { grid-template-columns: repeat(2, 1fr); } }
+
+    .col-card {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--product-stroke);
+      border-radius: 12px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: background 150ms ease, border-color 150ms ease;
+      display: flex; flex-direction: column;
+    }
+    .col-card:hover { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.14); }
+    .col-thumb {
+      aspect-ratio: 4 / 3;
+      position: relative;
+      overflow: hidden;
+    }
+    .col-meta {
+      padding: 12px 14px 14px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .col-name {
+      color: #fff;
+      font-size: 13.5px;
+      font-weight: 500;
+      line-height: 1.35;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .col-art {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: rgba(255,255,255,0.5);
+    }
+    .col-foot {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-top: 6px;
+    }
+    .photo-count {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11.5px;
+      color: rgba(255,255,255,0.6);
+      font-variant-numeric: tabular-nums;
+    }
+    .photo-count svg { width: 12px; height: 12px; }
+    .updated {
+      font-size: 11px;
+      color: rgba(255,255,255,0.35);
+    }
+    .empty-thumb {
+      display: flex; align-items: center; justify-content: center;
+      height: 100%;
+      color: rgba(255,255,255,0.25);
+    }
+    .empty-thumb svg { width: 28px; height: 28px; }
+
+    /* placeholder thumbnails — radial gradients to feel like part photos */
+    .ph { width: 100%; height: 100%; position: relative; }
+    .ph::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(circle at 50% 35%, rgba(255,255,255,0.06), transparent 60%);
+    }
+    .ph1 { background: radial-gradient(ellipse at 50% 50%, #4a4a48 0%, #2c2b29 60%, #1a1917 100%); }
+    .ph2 { background: radial-gradient(circle at 30% 45%, #5a5450 0%, #3a3633 50%, #1f1e1c 100%); }
+    .ph3 { background: linear-gradient(135deg, #3a3936 0%, #28272a 60%, #1c1b1a 100%); }
+    .ph4 { background: radial-gradient(circle at 60% 40%, #66605a 0%, #3a3733 55%, #1f1d1b 100%); }
+    .ph5 { background: linear-gradient(160deg, #3d3a36 0%, #2a2a2c 50%, #1a1917 100%); }
+    .ph6 { background: radial-gradient(ellipse at 40% 50%, #524a44 0%, #2f2c29 60%, #181715 100%); }
+    .ph7 { background: linear-gradient(180deg, #4d4844 0%, #2c2926 70%, #1a1917 100%); }
+    .ph8 { background: radial-gradient(circle at 70% 30%, #6a625b 0%, #38332f 55%, #1c1a18 100%); }
+    .ph9 { background: linear-gradient(135deg, #2e2d2b 0%, #44403c 50%, #1f1e1c 100%); }
+    .ph10 { background: radial-gradient(circle at 50% 60%, #5e5650 0%, #322f2c 60%, #19181a 100%); }
+    .ph11 { background: linear-gradient(45deg, #3a3633 0%, #2a2926 60%, #1c1b18 100%); }
+    .ph12 { background: radial-gradient(ellipse at 60% 40%, #4a443e 0%, #28262a 60%, #181715 100%); }
+
+    /* part outline overlay (very subtle) */
+    .ph-overlay {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0.22;
+    }
+    .ph-overlay svg { width: 56%; height: 56%; color: #fff; stroke-width: 1; fill: none; }
+
+    /* failed plate */
+    .fail-plate {
+      margin-top: 16px;
+      background: rgba(191,77,67,0.10);
+      border: 1px solid rgba(191,77,67,0.4);
+      border-radius: 10px;
+      padding: 12px 14px;
+      display: flex; align-items: center; gap: 12px;
+      color: #f3a89f;
+      font-size: 13px;
+    }
+    .fail-plate .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--error-product); flex-shrink: 0; }
+    .fail-plate .fp-msg { flex: 1; color: #f5d0c9; }
+    .fail-plate strong { color: #fff; font-weight: 500; }
+    .fail-plate .actions { display: flex; gap: 6px; }
+    .fail-plate button {
+      height: 28px; padding: 0 10px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: #fff; border-radius: 6px;
+      font-size: 12px; cursor: pointer; font-family: inherit;
+    }
+    .fail-plate button:hover { background: rgba(255,255,255,0.1); }
+
+    /* ───────── owner card (collage detail) ───────── */
+    .owner-card {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--product-stroke);
+      border-radius: 12px;
+      padding: 18px 20px;
+      display: flex;
+      gap: 18px;
+      align-items: flex-start;
+    }
+    .owner-thumb {
+      width: 72px; height: 72px;
+      border-radius: 8px;
+      flex-shrink: 0;
+    }
+    .owner-body { flex: 1; min-width: 0; }
+    .owner-row {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      margin-bottom: 6px;
+    }
+    .owner-row .id-mono {
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      color: rgba(255,255,255,0.7);
+      background: rgba(255,255,255,0.06);
+      padding: 3px 8px;
+      border-radius: 5px;
+    }
+    .badge-kind {
+      display: inline-flex; align-items: center;
+      font-size: 10.5px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-weight: 500;
+      font-family: var(--font-sans);
+    }
+    .badge-smart { background: rgba(93,184,166,0.14); color: var(--accent-teal); border: 1px solid rgba(93,184,166,0.3); }
+    .badge-instance { background: rgba(232,165,90,0.14); color: var(--accent-amber); border: 1px solid rgba(232,165,90,0.3); }
+    .owner-name {
+      font-family: var(--font-serif); font-weight: 400;
+      font-size: 22px; line-height: 1.25; letter-spacing: -0.3px;
+      color: #fff;
+    }
+    .owner-articles {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      margin-top: 8px;
+    }
+    .art-chip {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: rgba(255,255,255,0.65);
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--product-stroke);
+      padding: 3px 8px; border-radius: 5px;
+    }
+
+    /* ───────── photos block ───────── */
+    .photos-head {
+      display: flex; align-items: baseline; justify-content: space-between;
+      margin: 36px 0 14px;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .photos-head .left { display: flex; align-items: baseline; gap: 14px; }
+    .photos-head .count { color: rgba(255,255,255,0.5); font-size: 13.5px; }
+    .photos-actions { display: flex; gap: 8px; }
+
+    .btn-coral {
+      display: inline-flex; align-items: center; gap: 8px;
+      height: 36px; padding: 0 16px;
+      background: var(--brand-coral);
+      color: #fff;
+      border: 1px solid var(--brand-coral-active);
+      border-radius: 8px;
+      box-shadow: var(--shadow-coral-inset);
+      font-family: var(--font-sans);
+      font-weight: 500;
+      font-size: 13.5px;
+      cursor: pointer;
+    }
+    .btn-coral:hover { background: var(--brand-coral-hover); }
+    .btn-coral svg { width: 14px; height: 14px; }
+
+    .btn-ghost {
+      display: inline-flex; align-items: center; gap: 8px;
+      height: 36px; padding: 0 14px;
+      background: transparent;
+      color: rgba(255,255,255,0.78);
+      border: 1px solid var(--product-stroke);
+      border-radius: 8px;
+      font-family: var(--font-sans);
+      font-weight: 500;
+      font-size: 13.5px;
+      cursor: pointer;
+    }
+    .btn-ghost:hover { background: rgba(255,255,255,0.05); color: #fff; }
+    .btn-ghost svg { width: 14px; height: 14px; }
+
+    .photos-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 12px;
+    }
+    @media (max-width: 1100px) { .photos-grid { grid-template-columns: repeat(4, 1fr); } }
+    @media (max-width: 800px)  { .photos-grid { grid-template-columns: repeat(2, 1fr); } }
+
+    .photo-tile {
+      position: relative;
+      aspect-ratio: 1;
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--slate-850);
+      border: 1px solid var(--product-stroke);
+      cursor: grab;
+    }
+    .photo-tile:active { cursor: grabbing; }
+    .photo-tile.dragging { transform: scale(1.04); border-color: var(--brand-coral); box-shadow: 0 6px 18px rgba(0,0,0,0.5); }
+    .photo-tile.failed { border-color: rgba(191,77,67,0.5); background: rgba(191,77,67,0.06); }
+
+    .pos-chip {
+      position: absolute; left: 8px; top: 8px;
+      font-family: var(--font-mono);
+      font-size: 11px; line-height: 1;
+      padding: 3px 6px;
+      background: rgba(0,0,0,0.55);
+      color: #fff;
+      border-radius: 4px;
+      backdrop-filter: blur(2px);
+      font-variant-numeric: tabular-nums;
+    }
+    .photo-actions {
+      position: absolute; right: 6px; top: 6px;
+      display: flex; gap: 4px;
+      opacity: 0; transition: opacity 150ms ease;
+    }
+    .photo-tile:hover .photo-actions { opacity: 1; }
+    .photo-actions button {
+      width: 26px; height: 26px;
+      background: rgba(0,0,0,0.55);
+      color: #fff;
+      border: none; border-radius: 5px;
+      cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .photo-actions button:hover { background: rgba(0,0,0,0.85); }
+    .photo-actions svg { width: 12px; height: 12px; }
+    .photo-actions .danger:hover { background: var(--error-product); }
+
+    .drag-handle {
+      position: absolute; left: 6px; bottom: 6px;
+      width: 22px; height: 22px;
+      display: inline-flex; align-items: center; justify-content: center;
+      color: rgba(255,255,255,0.45);
+      opacity: 0; transition: opacity 150ms ease;
+    }
+    .photo-tile:hover .drag-handle { opacity: 1; }
+    .drag-handle svg { width: 14px; height: 14px; }
+
+    .failed-mark {
+      position: absolute; right: 8px; bottom: 8px;
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 10.5px;
+      color: #fff;
+      background: var(--error-product);
+      padding: 3px 6px; border-radius: 4px;
+      font-weight: 500;
+      letter-spacing: 0.3px;
+    }
+
+    /* upload zone */
+    .upload-zone {
+      margin-top: 14px;
+      border: 1.5px dashed var(--product-stroke);
+      border-radius: 12px;
+      padding: 32px 20px;
+      text-align: center;
+      transition: border-color 150ms ease, background 150ms ease;
+    }
+    .upload-zone.over {
+      border-color: var(--brand-coral);
+      background: rgba(204,120,92,0.05);
+    }
+    .uz-title {
+      font-family: var(--font-serif);
+      font-size: 17px;
+      color: #fff;
+      letter-spacing: -0.2px;
+    }
+    .uz-sub {
+      font-size: 12.5px;
+      color: rgba(255,255,255,0.5);
+      margin-top: 4px;
+    }
+    .uz-row {
+      display: flex; gap: 8px; justify-content: center;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+
+    /* mobile responsive — stack sidebar to top */
+    @media (max-width: 720px) {
+      .screen { grid-template-columns: 1fr; }
+      .sidebar { position: relative; max-height: none; flex-direction: row; gap: 6px; padding: 8px; overflow-x: auto; border-right: none; border-bottom: 1px solid var(--product-stroke); }
+      .sb-head, .sb-label, .sb-spacer, .acct, .sb-cta { display: none; }
+      .sb-item { flex-shrink: 0; padding: 6px 10px; font-size: 12.5px; }
+      .sb-item .count { display: none; }
+      .topbar { padding: 0 14px; gap: 8px; height: 50px; }
+      .search { min-width: 140px; }
+      .search kbd, .crumbs .leading { display: none; }
+      .content { padding: 22px 14px 48px; }
+      .display-md { font-size: 28px; }
+      .display-sm { font-size: 22px; }
+      .photos-head { margin-top: 24px; }
+      .pill-btn .lbl { display: none; }
+      .pill-btn { padding: 0 9px; }
+    }
+
+    /* anchor labels for screens */
+    .scr-label {
+      position: absolute;
+      left: 24px; top: 14px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: rgba(255,255,255,0.32);
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .main-rel { position: relative; }
+  </style>
+</head>
+<body>
+
+<!-- ════════════════════ SCREEN 1: GROUP OVERVIEW ════════════════════ -->
+<section class="screen" data-screen="group-overview">
+  <aside class="sidebar">
+    <div class="sb-head">
+      <div class="logo">
+        <svg class="dot" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 13.5 8 19 5l-3 5 6 1.5-6 1.5 3 5-5.5-3L12 22l-1.5-7L5 19l3-5-6-1.5L8 11 5 5l5.5 3z"></path></svg>
+        Photos
+      </div>
+      <button class="iconbtn" aria-label="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.6 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path></svg>
+      </button>
+    </div>
+
+    <button class="sb-cta">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+      New group
+    </button>
+
+    <div class="sb-label">Channels</div>
+
+    <button class="sb-item active">
+      <span class="ico"><svg viewBox="0 0 24 24" fill="currentColor" class="star"><path d="M12 2 13.5 8 19 5l-3 5 6 1.5-6 1.5 3 5-5.5-3L12 22l-1.5-7L5 19l3-5-6-1.5L8 11 5 5l5.5 3z"/></svg></span>
+      <span class="name">Эталонные</span>
+      <span class="count">142</span>
+    </button>
+
+    <button class="sb-item">
+      <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4M3 17l9 4 9-4"/></svg></span>
+      <span class="name">Avito #1</span>
+      <span class="count">98</span>
+    </button>
+    <button class="sb-item">
+      <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4M3 17l9 4 9-4"/></svg></span>
+      <span class="name">Avito #2</span>
+      <span class="count">81</span>
+    </button>
+    <button class="sb-item">
+      <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg></span>
+      <span class="name">С дефектами</span>
+      <span class="count">37</span>
+    </button>
+    <button class="sb-item">
+      <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+      <span class="name">Архив</span>
+      <span class="count">14</span>
+    </button>
+
+    <div class="sb-label">Tools</div>
+    <button class="sb-item">
+      <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>
+      <span class="name">Search owners</span>
+    </button>
+
+    <div class="sb-spacer"></div>
+
+    <div class="acct">
+      <div class="av">SS</div>
+      <div>
+        <div class="acct-name">Степан</div>
+        <div class="acct-sub">Local</div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main main-rel">
+    <span class="scr-label">screen 1 — group overview</span>
+    <header class="topbar">
+      <div class="crumbs">
+        <span class="leading">Photos</span>
+        <span class="sep leading">/</span>
+        <span class="here">Эталонные</span>
+      </div>
+      <div class="tb-spacer"></div>
+      <div class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input placeholder="Поиск по артикулу или названию" />
+        <kbd>⌘K</kbd>
+      </div>
+      <button class="pill-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        <span class="lbl">Edit group</span>
+      </button>
+      <button class="pill-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M7 6V4a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6"/></svg>
+        <span class="lbl">Sort</span>
+      </button>
+    </header>
+
+    <div class="content">
+      <h1 class="display display-md">Эталонные.</h1>
+      <p class="sub">Канал-эталон. Одна группа на всю систему — фото для основного сайта и фидов. Заполняется один раз и редко обновляется.</p>
+
+      <div class="stat-row">
+        <span><span class="num">142</span> коллажа</span>
+        <span class="dot">·</span>
+        <span><span class="num">1 238</span> фото</span>
+        <span class="dot">·</span>
+        <span><span class="num">17</span> без фото</span>
+        <span class="dot">·</span>
+        <span>обновлено <span class="num">сегодня</span></span>
+      </div>
+
+      <div class="tabs">
+        <button class="tab active">Все<span class="badge">142</span></button>
+        <button class="tab">Без фото<span class="badge">17</span></button>
+        <button class="tab">Меньше трёх<span class="badge">29</span></button>
+      </div>
+
+      <div class="collage-grid">
+        <!-- card 1 -->
+        <article class="col-card">
+          <div class="col-thumb"><div class="ph ph1">
+            <div class="ph-overlay"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="22" stroke="currentColor"/><circle cx="32" cy="32" r="10" stroke="currentColor"/><circle cx="32" cy="32" r="2.5" fill="currentColor" stroke="none"/></svg></div>
+          </div></div>
+          <div class="col-meta">
+            <div class="col-name">Тормозной диск передний 282мм</div>
+            <div class="col-art">8201XXX · BD-2820</div>
+            <div class="col-foot">
+              <span class="photo-count">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+                7 фото
+              </span>
+              <span class="updated">2 дня назад</span>
+            </div>
+          </div>
+        </article>
+
+        <!-- card 2 -->
+        <article class="col-card">
+          <div class="col-thumb"><div class="ph ph2">
+            <div class="ph-overlay"><svg viewBox="0 0 64 64"><rect x="14" y="22" width="36" height="20" rx="3" stroke="currentColor"/><path d="M14 30h36M22 22v-6M42 22v-6" stroke="currentColor"/></svg></div>
+          </div></div>
+          <div class="col-meta">
+            <div class="col-name">Радиатор охлаждения 1.6L</div>
+            <div class="col-art">21AB2-1300</div>
+            <div class="col-foot">
+              <span class="photo-count">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+                5 фото
+              </span>
+              <span class="updated">5 дней назад</span>
+            </div>
+          </div>
+        </article>
+
+        <!-- card 3 — empty -->
+        <article class="col-card">
+          <div class="col-thumb"><div class="ph ph9">
+            <div class="empty-thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></div>
+          </div></div>
+          <div class="col-meta">
+            <div class="col-name">Стойка стабилизатора задняя</div>
+            <div class="col-art">CL-1442 · 552I8</div>
+            <div class="col-foot">
+              <span class="photo-count" style="color: var(--accent-amber);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 7v5M12 17h.01"/></svg>
+                нет фото
+              </span>
+              <span class="updated">создан вчера</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="col-card">
+          <div class="col-thumb"><div class="ph ph3"><div class="ph-overlay"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="20" stroke="currentColor"/><path d="M32 12v40M12 32h40" stroke="currentColor"/></svg></div></div></div>
+          <div class="col-meta">
+            <div class="col-name">Колодка тормозная задняя</div>
+            <div class="col-art">8200XXY</div>
+            <div class="col-foot">
+              <span class="photo-count">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+                4 фото
+              </span>
+              <span class="updated">неделю назад</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="col-card">
+          <div class="col-thumb"><div class="ph ph4"><div class="ph-overlay"><svg viewBox="0 0 64 64"><path d="M16 32 L48 32 M22 24 L42 24 M22 40 L42 40" stroke="currentColor"/><circle cx="32" cy="32" r="6" stroke="currentColor"/></svg></div></div></div>
+          <div class="col-meta">
+            <div class="col-name">Амортизатор передний правый</div>
+            <div class="col-art">543033KA0A</div>
+            <div class="col-foot">
+              <span class="photo-count">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+                8 фото
+              </span>
+              <span class="updated">сегодня</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="col-card">
+          <div class="col-thumb"><div class="ph ph5"><div class="ph-overlay"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="22" stroke="currentColor"/><circle cx="32" cy="32" r="14" stroke="currentColor"/><circle cx="32" cy="32" r="6" stroke="currentColor"/></svg></div></div></div>
+          <div class="col-meta">
+            <div class="col-name">Подшипник ступицы передний</div>
+            <div class="col-art">VKBA 3656</div>
+            <div class="col-foot">
+              <span class="photo-count">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+                6 фото
+              </span>
+              <span class="updated">3 дня назад</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="col-card">
+          <div class="col-thumb"><div class="ph ph6"><div class="ph-overlay"><svg viewBox="0 0 64 64"><rect x="20" y="14" width="24" height="36" rx="2" stroke="currentColor"/><path d="M26 22h12M26 28h12M26 34h12M26 40h8" stroke="currentColor"/></svg></div></div></div>
+          <div class="col-meta">
+            <div class="col-name">Аккумулятор 60Ah</div>
+            <div class="col-art">560 408 054</div>
+            <div class="col-foot">
+              <span class="photo-count">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+                3 фото
+              </span>
+              <span class="updated">2 недели назад</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="col-card">
+          <div class="col-thumb"><div class="ph ph7"><div class="ph-overlay"><svg viewBox="0 0 64 64"><path d="M14 38c0-10 8-18 18-18s18 8 18 18" stroke="currentColor"/><circle cx="32" cy="38" r="6" stroke="currentColor"/></svg></div></div></div>
+          <div class="col-meta">
+            <div class="col-name">Фара левая галогенная</div>
+            <div class="col-art">26060XX</div>
+            <div class="col-foot">
+              <span class="photo-count">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+                10 фото
+              </span>
+              <span class="updated">сегодня</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="col-card">
+          <div class="col-thumb"><div class="ph ph8"><div class="ph-overlay"><svg viewBox="0 0 64 64"><path d="M16 24 L48 24 L44 44 L20 44 Z" stroke="currentColor"/><path d="M22 24 L24 44 M42 24 L40 44" stroke="currentColor"/></svg></div></div></div>
+          <div class="col-meta">
+            <div class="col-name">Фильтр воздушный квадратный</div>
+            <div class="col-art">16546-EB3-0A</div>
+            <div class="col-foot">
+              <span class="photo-count">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+                4 фото
+              </span>
+              <span class="updated">10 дней назад</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="col-card">
+          <div class="col-thumb"><div class="ph ph10"><div class="ph-overlay"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="20" stroke="currentColor"/><path d="M22 22l20 20M42 22L22 42" stroke="currentColor"/></svg></div></div></div>
+          <div class="col-meta">
+            <div class="col-name">Сцепление в сборе</div>
+            <div class="col-art">3001A097</div>
+            <div class="col-foot">
+              <span class="photo-count">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+                5 фото
+              </span>
+              <span class="updated">4 дня назад</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="col-card">
+          <div class="col-thumb"><div class="ph ph11"><div class="ph-overlay"><svg viewBox="0 0 64 64"><path d="M14 32 L26 18 L38 18 L50 32 L38 46 L26 46 Z" stroke="currentColor"/><circle cx="32" cy="32" r="6" stroke="currentColor"/></svg></div></div></div>
+          <div class="col-meta">
+            <div class="col-name">Рулевая тяга</div>
+            <div class="col-art">D8520-EE60A</div>
+            <div class="col-foot">
+              <span class="photo-count">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+                6 фото
+              </span>
+              <span class="updated">час назад</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="col-card">
+          <div class="col-thumb"><div class="ph ph12"><div class="ph-overlay"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="22" stroke="currentColor"/><path d="M32 14 L32 50 M14 32 L50 32" stroke="currentColor" stroke-dasharray="3 3"/></svg></div></div></div>
+          <div class="col-meta">
+            <div class="col-name">Шкив коленвала</div>
+            <div class="col-art">12303-XXX</div>
+            <div class="col-foot">
+              <span class="photo-count">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+                2 фото
+              </span>
+              <span class="updated">месяц назад</span>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </main>
+</section>
+
+<!-- ════════════════════ SCREEN 2: COLLAGE DETAIL ════════════════════ -->
+<section class="screen" data-screen="collage-detail">
+  <aside class="sidebar">
+    <div class="sb-head">
+      <div class="logo">
+        <svg class="dot" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 13.5 8 19 5l-3 5 6 1.5-6 1.5 3 5-5.5-3L12 22l-1.5-7L5 19l3-5-6-1.5L8 11 5 5l5.5 3z"></path></svg>
+        Photos
+      </div>
+      <button class="iconbtn" aria-label="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.6 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path></svg>
+      </button>
+    </div>
+
+    <button class="sb-cta">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+      New group
+    </button>
+
+    <div class="sb-label">Channels</div>
+    <button class="sb-item active">
+      <span class="ico"><svg viewBox="0 0 24 24" fill="currentColor" class="star"><path d="M12 2 13.5 8 19 5l-3 5 6 1.5-6 1.5 3 5-5.5-3L12 22l-1.5-7L5 19l3-5-6-1.5L8 11 5 5l5.5 3z"/></svg></span>
+      <span class="name">Эталонные</span>
+      <span class="count">142</span>
+    </button>
+    <button class="sb-item">
+      <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4M3 17l9 4 9-4"/></svg></span>
+      <span class="name">Avito #1</span>
+      <span class="count">98</span>
+    </button>
+    <button class="sb-item">
+      <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4M3 17l9 4 9-4"/></svg></span>
+      <span class="name">Avito #2</span>
+      <span class="count">81</span>
+    </button>
+    <button class="sb-item">
+      <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg></span>
+      <span class="name">С дефектами</span>
+      <span class="count">37</span>
+    </button>
+    <button class="sb-item">
+      <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+      <span class="name">Архив</span>
+      <span class="count">14</span>
+    </button>
+
+    <div class="sb-spacer"></div>
+
+    <div class="acct">
+      <div class="av">SS</div>
+      <div>
+        <div class="acct-name">Степан</div>
+        <div class="acct-sub">Local</div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main main-rel">
+    <span class="scr-label">screen 2 — collage detail</span>
+    <header class="topbar">
+      <div class="crumbs">
+        <span class="leading">Photos</span>
+        <span class="sep leading">/</span>
+        <span class="leading">Эталонные</span>
+        <span class="sep leading">/</span>
+        <span class="here">smart_10000024</span>
+      </div>
+      <div class="tb-spacer"></div>
+      <button class="pill-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        <span class="lbl">Compare across groups</span>
+      </button>
+      <button class="pill-btn" style="color: rgba(255,255,255,0.55);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,6 5,6 21,6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+        <span class="lbl">Delete collage</span>
+      </button>
+    </header>
+
+    <div class="content">
+      <article class="owner-card">
+        <div class="owner-thumb ph ph1">
+          <div class="ph-overlay"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="22" stroke="currentColor" fill="none"/><circle cx="32" cy="32" r="10" stroke="currentColor" fill="none"/><circle cx="32" cy="32" r="2.5" fill="currentColor"/></svg></div>
+        </div>
+        <div class="owner-body">
+          <div class="owner-row">
+            <span class="id-mono">smart_10000024</span>
+            <span class="badge-kind badge-smart">Smart part</span>
+          </div>
+          <div class="owner-name">Тормозной диск передний 282мм.</div>
+          <div class="owner-articles">
+            <span class="art-chip">8201XXX</span>
+            <span class="art-chip">BD-2820</span>
+            <span class="art-chip">DF4356</span>
+            <span class="art-chip">5410.00</span>
+          </div>
+        </div>
+      </article>
+
+      <div class="photos-head">
+        <div class="left">
+          <h2 class="display display-sm">Photos.</h2>
+          <span class="count">7 фото · упорядочены вручную</span>
+        </div>
+        <div class="photos-actions">
+          <button class="btn-ghost">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2"/><circle cx="12" cy="12" r="6"/></svg>
+            Take photo
+          </button>
+          <button class="btn-coral">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+            Add photo
+          </button>
+        </div>
+      </div>
+
+      <div class="photos-grid">
+        <div class="photo-tile">
+          <div class="ph ph1" style="position:absolute;inset:0;"><div class="ph-overlay"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="22" stroke="currentColor" fill="none"/><circle cx="32" cy="32" r="10" stroke="currentColor" fill="none"/></svg></div></div>
+          <span class="pos-chip">01</span>
+          <div class="photo-actions">
+            <button title="Copy URL"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+            <button class="danger" title="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,6 5,6 21,6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+          </div>
+          <span class="drag-handle"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
+        </div>
+
+        <div class="photo-tile dragging">
+          <div class="ph ph4" style="position:absolute;inset:0;"><div class="ph-overlay"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="22" stroke="currentColor" fill="none"/><circle cx="32" cy="32" r="14" stroke="currentColor" fill="none"/></svg></div></div>
+          <span class="pos-chip">02</span>
+        </div>
+
+        <div class="photo-tile">
+          <div class="ph ph5" style="position:absolute;inset:0;"><div class="ph-overlay"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="22" stroke="currentColor" fill="none"/><path d="M22 22l20 20" stroke="currentColor"/></svg></div></div>
+          <span class="pos-chip">03</span>
+          <div class="photo-actions">
+            <button title="Copy URL"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+            <button class="danger" title="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3,6 5,6 21,6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+          </div>
+        </div>
+
+        <div class="photo-tile">
+          <div class="ph ph6" style="position:absolute;inset:0;"><div class="ph-overlay"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="22" stroke="currentColor" fill="none"/><circle cx="32" cy="32" r="6" stroke="currentColor" fill="none"/></svg></div></div>
+          <span class="pos-chip">04</span>
+        </div>
+
+        <div class="photo-tile">
+          <div class="ph ph7" style="position:absolute;inset:0;"><div class="ph-overlay"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="20" stroke="currentColor" fill="none"/></svg></div></div>
+          <span class="pos-chip">05</span>
+        </div>
+
+        <div class="photo-tile failed">
+          <div style="position:absolute;inset:0; display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.3);"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 7v5M12 17h.01"/></svg></div>
+          <span class="pos-chip">06</span>
+          <span class="failed-mark">failed</span>
+        </div>
+
+        <div class="photo-tile">
+          <div class="ph ph2" style="position:absolute;inset:0;"><div class="ph-overlay"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="22" stroke="currentColor" fill="none"/></svg></div></div>
+          <span class="pos-chip">07</span>
+        </div>
+      </div>
+
+      <div class="upload-zone">
+        <div class="uz-title">Перетащи фото сюда.</div>
+        <div class="uz-sub">Принимаем jpg, png, heic. Ставим в очередь и грузим параллельно. HEIC конвертируется в JPEG.</div>
+        <div class="uz-row">
+          <button class="btn-ghost">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Choose files
+          </button>
+          <button class="btn-ghost">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="14" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M7 6l2-3h6l2 3"/></svg>
+            Take photo
+          </button>
+        </div>
+      </div>
+
+      <div class="fail-plate">
+        <span class="dot"></span>
+        <div class="fp-msg">
+          <strong>1 фото не загрузилось.</strong>&nbsp; MinIO не ответил на PUT. Position 06 пустой.
+        </div>
+        <div class="actions">
+          <button>Retry</button>
+          <button>Delete</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</section>
+
+</body>
+</html>

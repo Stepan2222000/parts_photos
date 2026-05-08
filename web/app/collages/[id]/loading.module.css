@@ -1,0 +1,107 @@
+.shell {
+  display: grid;
+  grid-template-columns: 256px 1fr;
+  min-height: 100vh;
+}
+@media (max-width: 720px) {
+  .shell { grid-template-columns: 1fr; }
+}
+
+.sidebar {
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  padding: 14px 10px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+@media (max-width: 720px) {
+  .sidebar {
+    flex-direction: row;
+    padding: 8px;
+    gap: 8px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    overflow: hidden;
+  }
+}
+
+.sLogo, .sCta, .sItem {
+  background: var(--bg-thumb);
+  border-radius: 6px;
+}
+.sLogo { height: 24px; width: 60%; }
+.sCta { height: 32px; }
+.sItem { height: 28px; }
+@media (max-width: 720px) {
+  .sLogo, .sCta, .sItem { height: 28px; min-width: 80px; }
+}
+
+.main { display: flex; flex-direction: column; min-width: 0; }
+.topbar {
+  height: 56px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-page);
+}
+@media (max-width: 720px) { .topbar { height: 50px; } }
+
+.content {
+  padding: 32px 24px 64px;
+  max-width: 1280px;
+}
+@media (max-width: 720px) { .content { padding: 22px 14px 48px; } }
+
+.card {
+  display: flex;
+  gap: 16px;
+  padding: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.cardThumb {
+  width: 120px; height: 120px;
+  flex-shrink: 0;
+  background: var(--bg-thumb);
+  border-radius: 8px;
+}
+.cardMeta { flex: 1; display: flex; flex-direction: column; gap: 8px; padding-top: 6px; }
+
+.bar {
+  height: 14px;
+  background: var(--bg-thumb);
+  border-radius: 4px;
+}
+.barWide { width: 70%; }
+.barNarrow { width: 35%; height: 11px; }
+
+.h2 {
+  height: 28px; width: 110px;
+  background: var(--bg-thumb);
+  border-radius: 6px;
+  margin: 36px 0 14px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+}
+@media (max-width: 1100px) { .grid { grid-template-columns: repeat(4, 1fr); } }
+@media (max-width: 800px)  { .grid { grid-template-columns: repeat(2, 1fr); } }
+
+.tile {
+  aspect-ratio: 1;
+  background: var(--bg-thumb);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.tile:nth-child(2) { animation-delay: 0.1s; }
+.tile:nth-child(3) { animation-delay: 0.2s; }
+.tile:nth-child(4) { animation-delay: 0.3s; }
+.tile:nth-child(5) { animation-delay: 0.4s; }
+.tile:nth-child(6) { animation-delay: 0.5s; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}

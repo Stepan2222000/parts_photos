@@ -1,0 +1,15 @@
+.DS_Store
+**/.DS_Store
+**/__pycache__/
+*.py[cod]
+.venv/
+venv/
+node_modules/
+.next/
+.turbo/
+*.tsbuildinfo
+.env
+.env.local
+**/.env
+**/.env.local
+.claude/

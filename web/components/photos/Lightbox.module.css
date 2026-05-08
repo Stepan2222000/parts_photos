@@ -1,0 +1,88 @@
+.backdrop {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(0, 0, 0, 0.94);
+  display: flex; align-items: center; justify-content: center;
+  padding: 64px 48px;
+  cursor: zoom-out;
+  animation: fadeIn 150ms ease-out;
+}
+@media (max-width: 800px) { .backdrop { padding: 56px 12px; } }
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.toolbar {
+  position: absolute; top: 12px; left: 12px; right: 12px;
+  display: flex; align-items: center; gap: 10px;
+  z-index: 2;
+  cursor: default;
+}
+
+.counter {
+  color: rgba(255, 255, 255, 0.92);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.filename {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40vw;
+}
+@media (max-width: 800px) { .filename { display: none; } }
+
+.spacer { flex: 1; }
+
+.tbBtn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  font: 500 12.5px / 1 inherit;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.tbBtn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.18); }
+.tbBtn:disabled { opacity: 0.6; cursor: wait; }
+.tbBtn svg { width: 14px; height: 14px; }
+.tbLabel {}
+@media (max-width: 600px) { .tbLabel { display: none; } }
+
+.image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  cursor: default;
+  user-select: none;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+}
+
+.nav {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 44px; height: 44px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 50%;
+  color: #fff;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 2;
+  transition: background 120ms ease;
+}
+.nav:hover { background: rgba(255, 255, 255, 0.2); }
+.nav svg { width: 20px; height: 20px; }
+.navLeft { left: 16px; }
+.navRight { right: 16px; }
+@media (max-width: 800px) {
+  .nav { width: 38px; height: 38px; }
+  .navLeft { left: 6px; }
+  .navRight { right: 6px; }
+  .nav svg { width: 18px; height: 18px; }
+}
