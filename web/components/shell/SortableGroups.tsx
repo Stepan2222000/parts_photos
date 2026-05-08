@@ -15,8 +15,8 @@ import {
 import {
   SortableContext,
   arrayMove,
-  rectSortingStrategy,
   useSortable,
+  verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
@@ -135,7 +135,7 @@ export default function SortableGroups({ groups: initial, activeGroupId }: Props
       collisionDetection={closestCenter}
       onDragEnd={onDragEnd}
     >
-      <SortableContext items={groups.map((g) => g.id)} strategy={rectSortingStrategy}>
+      <SortableContext items={groups.map((g) => g.id)} strategy={verticalListSortingStrategy}>
         {groups.map((g) => (
           <SortableItem key={g.id} group={g} active={activeGroupId === g.id} />
         ))}

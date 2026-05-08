@@ -1,5 +1,4 @@
 async function blobToPng(blob: Blob): Promise<Blob> {
-  if (blob.type === "image/png") return blob;
   const objectUrl = URL.createObjectURL(blob);
   try {
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -27,20 +26,17 @@ async function blobToPng(blob: Blob): Promise<Blob> {
 async function fetchAsPng(url: string): Promise<Blob> {
   const r = await fetch(url);
   if (!r.ok) throw new Error(`Fetch failed (${r.status})`);
-  return blobToPng(await r.blob());
+  const blob = await r.blob();
+  return blob.type === "image/png" ? blob : await blobToPng(blob);
 }
 
-export function copyImageToClipboard(url: string): Promise<void> {
+export async function copyImageToClipboard(url: string): Promise<void> {
   if (typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) {
-    return Promise.reject(
-      new Error("Clipboard image API не поддерживается этим браузером"),
-    );
+    throw new Error("Clipboard image API не поддерживается этим браузером");
   }
-  // Safari requires `clipboard.write` to be called synchronously inside the
-  // user gesture — any `await` before it kills the activation. Solution:
-  // pass a `Promise<Blob>` to ClipboardItem (Safari awaits it internally).
-  // Chrome/Firefox now support this pattern too.
-  return navigator.clipboard.write([
+  // Pass a Promise (not an awaited blob) so Safari keeps the user-activation
+  // context. If we await the fetch first, Safari rejects with NotAllowedError.
+  await navigator.clipboard.write([
     new ClipboardItem({ "image/png": fetchAsPng(url) }),
   ]);
 }
