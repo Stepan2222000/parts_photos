@@ -43,9 +43,11 @@ function StackIcon() {
 function SortableItem({
   group,
   active,
+  onClick,
 }: {
   group: Group;
   active: boolean;
+  onClick?: () => void;
 }) {
   const {
     attributes,
@@ -69,6 +71,7 @@ function SortableItem({
       style={style}
       href={`/groups/${group.id}`}
       className={`${s.item} ${active ? s.itemActive : ""} ${isDragging ? s.itemDragging : ""}`}
+      onClick={onClick}
       {...attributes}
       {...listeners}
     >
@@ -82,9 +85,10 @@ function SortableItem({
 interface Props {
   groups: Group[];
   activeGroupId?: string;
+  onItemClick?: () => void;
 }
 
-export default function SortableGroups({ groups: initial, activeGroupId }: Props) {
+export default function SortableGroups({ groups: initial, activeGroupId, onItemClick }: Props) {
   const router = useRouter();
   const dndId = useId();
   const [groups, setGroups] = useState(initial);
@@ -137,7 +141,12 @@ export default function SortableGroups({ groups: initial, activeGroupId }: Props
     >
       <SortableContext items={groups.map((g) => g.id)} strategy={verticalListSortingStrategy}>
         {groups.map((g) => (
-          <SortableItem key={g.id} group={g} active={activeGroupId === g.id} />
+          <SortableItem
+            key={g.id}
+            group={g}
+            active={activeGroupId === g.id}
+            onClick={onItemClick}
+          />
         ))}
       </SortableContext>
     </DndContext>

@@ -12,6 +12,8 @@
   height: 100vh;
   overflow-y: auto;
 }
+
+.backdrop { display: none; }
 .head {
   display: flex; align-items: center; justify-content: space-between;
   padding: 6px 8px 4px;
@@ -99,40 +101,32 @@
 
 @media (max-width: 720px) {
   .sidebar {
-    width: 100%;
-    height: auto;
-    max-height: none;
-    position: relative;
-    top: auto;
-    flex-direction: row;
-    align-items: center;
-    gap: 6px;
-    padding: 8px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
+    position: fixed;
+    top: 0; left: 0;
+    width: 280px;
+    max-width: 85vw;
+    height: 100vh;
+    transform: translateX(-100%);
+    transition: transform 200ms ease-out;
+    box-shadow: 0 0 0 0 transparent;
+    z-index: 100;
   }
-  .head, .label, .spacer, .acct { display: none; }
-  .cta {
-    flex-shrink: 0;
-    width: 40px; height: 40px;
-    margin: 0;
-    padding: 0;
-    border-radius: 50%;
-    justify-content: center;
-    background: var(--brand-coral);
-    color: #fff;
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
   }
-  .cta:hover { background: var(--brand-coral-hover); }
-  .ctaText { display: none; }
-  .item {
-    flex-shrink: 0;
-    padding: 8px 12px;
-    font-size: 13px;
-    min-height: 40px;
-    width: auto;
+
+  .backdrop {
+    display: block;
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 150ms ease-out;
+    z-index: 99;
   }
-  .item .name { flex: 0 0 auto; }
-  .item .count { display: none; }
+  .backdropOpen {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }

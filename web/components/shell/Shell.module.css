@@ -10,14 +10,33 @@
 .crumbs {
   display: flex; align-items: center; gap: 8px;
   font-size: 13px; color: var(--text-muted);
+  min-width: 0;
 }
 .crumbs .sep { color: var(--text-vfaint); }
 .crumbs .here { color: var(--text-strong); }
 .spacer { flex: 1; }
 .content { padding: 32px 24px 64px; max-width: 1280px; }
 
+.hamburger { display: none; }
+
 @media (max-width: 720px) {
   .shell { grid-template-columns: 1fr; }
-  .topbar { padding: 0 14px; gap: 8px; height: 50px; }
+  .topbar { padding: 0 14px; gap: 10px; height: 50px; }
   .content { padding: 22px 14px 48px; }
+  .crumbs { font-size: 12.5px; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .hamburger {
+    display: inline-flex;
+    align-items: center; justify-content: center;
+    width: 40px; height: 40px;
+    background: transparent;
+    border: none;
+    color: var(--text-strong);
+    cursor: pointer;
+    border-radius: 8px;
+    margin-left: -8px;
+    flex-shrink: 0;
+  }
+  .hamburger:hover { background: var(--hover); }
+  .hamburger svg { width: 22px; height: 22px; }
 }

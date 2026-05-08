@@ -1,0 +1,37 @@
+services:
+  api:
+    image: ghcr.io/stepan2222000/parts-photos-api:${IMAGE_TAG:-latest}
+    container_name: parts_photos_api
+    restart: unless-stopped
+    ports:
+      - "3200:8001"
+    environment:
+      PG_DSN: postgresql://admin:Password123@parts_photos:5432/parts_photos
+      MINIO_ENDPOINT: 2.26.53.128:9000
+      MINIO_ACCESS_KEY: admin
+      MINIO_SECRET_KEY: Password123
+      MINIO_BUCKET: parts-photos
+      MINIO_PUBLIC_BASE: http://2.26.53.128:9000/parts-photos
+      MINIO_SECURE: "false"
+      WEB_ORIGIN: http://2.26.53.128:3100
+      API_PORT: "8001"
+    networks:
+      - db_default
+
+  web:
+    image: ghcr.io/stepan2222000/parts-photos-web:${IMAGE_TAG:-latest}
+    container_name: parts_photos_web
+    restart: unless-stopped
+    ports:
+      - "3100:3000"
+    environment:
+      PHOTOS_API_BASE: http://parts_photos_api:8001
+      NEXT_PUBLIC_PHOTOS_API_BASE: http://2.26.53.128:3200
+    depends_on:
+      - api
+    networks:
+      - db_default
+
+networks:
+  db_default:
+    external: true
