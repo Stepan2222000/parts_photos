@@ -13,3 +13,6 @@ node_modules/
 **/.env
 **/.env.local
 .claude/
+parts_photo_generator/
+.txt
+**/*.egg-info/

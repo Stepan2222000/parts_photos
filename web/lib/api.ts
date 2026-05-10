@@ -4,6 +4,11 @@ import type {
   Group,
   OwnerSearchResult,
   Photo,
+  StudioAsset,
+  StudioBatch,
+  StudioBatchDetail,
+  StudioJob,
+  StudioOptions,
 } from "./types";
 
 const BASE =
@@ -116,4 +121,78 @@ export const api = {
     search: (q: string, limit = 20) =>
       req<OwnerSearchResult[]>(`/owners/search?q=${encodeURIComponent(q)}&limit=${limit}`),
   },
+  studio: {
+    listBackgrounds: () => req<StudioAsset[]>("/studio/backgrounds"),
+    uploadBackground: (file: File) => uploadAsset("/studio/backgrounds", file),
+    deleteBackground: (id: string) =>
+      req<void>(`/studio/backgrounds/${id}`, { method: "DELETE" }),
+    listWatermarks: () => req<StudioAsset[]>("/studio/watermarks"),
+    uploadWatermark: (file: File) => uploadAsset("/studio/watermarks", file),
+    deleteWatermark: (id: string) =>
+      req<void>(`/studio/watermarks/${id}`, { method: "DELETE" }),
+
+    listBatches: (limit = 50, offset = 0) =>
+      req<StudioBatch[]>(`/studio/batches?limit=${limit}&offset=${offset}`),
+    getBatch: (id: string) => req<StudioBatchDetail>(`/studio/batches/${id}`),
+    deleteBatch: (id: string) =>
+      req<void>(`/studio/batches/${id}`, { method: "DELETE" }),
+
+    getJob: (id: string) => req<StudioJob>(`/studio/jobs/${id}`),
+    transferJob: (jobId: string, collageId: string) =>
+      req<Photo>(`/studio/jobs/${jobId}/transfer`, {
+        method: "POST",
+        body: JSON.stringify({ collage_id: collageId }),
+      }),
+    transferSuggested: (
+      batchId: string,
+      transfers: { job_id: string; collage_id: string }[],
+    ) =>
+      req<Photo[]>(`/studio/batches/${batchId}/transfer-suggested`, {
+        method: "POST",
+        body: JSON.stringify({ transfers }),
+      }),
+
+    createBatch: async (input: {
+      options: StudioOptions;
+      name?: string;
+      customPrompt?: string;
+      backgroundId?: string;
+      watermarkId?: string;
+      targetCollageId?: string;
+      sourcePhotoIds?: string[];
+      files?: File[];
+    }): Promise<StudioBatch> => {
+      const fd = new FormData();
+      fd.append("options", JSON.stringify(input.options));
+      if (input.name) fd.append("name", input.name);
+      if (input.customPrompt) fd.append("custom_prompt", input.customPrompt);
+      if (input.backgroundId) fd.append("background_id", input.backgroundId);
+      if (input.watermarkId) fd.append("watermark_id", input.watermarkId);
+      if (input.targetCollageId) fd.append("target_collage_id", input.targetCollageId);
+      if (input.sourcePhotoIds && input.sourcePhotoIds.length) {
+        fd.append("source_photo_ids", input.sourcePhotoIds.join(","));
+      }
+      for (const f of input.files || []) fd.append("files", f);
+
+      const r = await fetch(`${BASE}/studio/batches`, {
+        method: "POST",
+        body: fd,
+        cache: "no-store",
+      });
+      if (!r.ok) throw new ApiError(r.status, "/studio/batches", await r.text());
+      return r.json();
+    },
+  },
 };
+
+async function uploadAsset(path: string, file: File): Promise<StudioAsset> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const r = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    body: fd,
+    cache: "no-store",
+  });
+  if (!r.ok) throw new ApiError(r.status, path, await r.text());
+  return r.json();
+}

@@ -36,6 +36,14 @@ function CopyIcon() {
     </svg>
   );
 }
+function SparklesIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z" />
+      <path d="M19 14l.7 1.7 1.7.7-1.7.7-.7 1.7-.7-1.7-1.7-.7 1.7-.7L19 14z" />
+    </svg>
+  );
+}
 function CheckIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -64,12 +72,14 @@ function TrashIcon() {
 function Tile({
   photo,
   position,
+  collageId,
   ownerId,
   onDelete,
   onOpen,
 }: {
   photo: Photo;
   position: number;
+  collageId: string;
   ownerId: string;
   onDelete: (id: string) => void;
   onOpen: (photoId: string) => void;
@@ -121,6 +131,16 @@ function Tile({
       ) : null}
       <span className={s.pos}>{String(position).padStart(2, "0")}</span>
       <div className={s.tileActions}>
+        {photo.state === "uploaded" && (
+          <a
+            href={`/studio?source_photo_id=${encodeURIComponent(photo.id)}&target_collage_id=${encodeURIComponent(collageId)}`}
+            title="Upgrade в Studio"
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <SparklesIcon />
+          </a>
+        )}
         {photo.state === "uploaded" && (
           <button
             type="button"
@@ -249,6 +269,7 @@ export default function PhotosGrid({ collageId, ownerId, photos: initialPhotos }
                 key={p.id}
                 photo={p}
                 position={i + 1}
+                collageId={collageId}
                 ownerId={ownerId}
                 onDelete={onDelete}
                 onOpen={openLightbox}

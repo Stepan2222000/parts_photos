@@ -51,7 +51,10 @@ jobs:
       - name: Build & push api
         uses: docker/build-push-action@v6
         with:
-          context: ./api
+          # Repo root context: api/Dockerfile pulls in ./studio_core too,
+          # so the build needs both directories visible.
+          context: .
+          file: ./api/Dockerfile
           platforms: linux/amd64
           push: true
           tags: |
@@ -86,6 +89,11 @@ jobs:
             git fetch --quiet origin main
             git reset --hard origin/main
             docker compose pull
+            # Apply DB migrations on every deploy (idempotent — uses
+            # CREATE … IF NOT EXISTS / ADD COLUMN IF NOT EXISTS).
+            for f in api/sql/migration_*.sql; do
+              docker exec -i parts_photos psql -U admin -d parts_photos < "$f" || true
+            done
             docker compose up -d --remove-orphans
             docker image prune -f
             docker compose ps

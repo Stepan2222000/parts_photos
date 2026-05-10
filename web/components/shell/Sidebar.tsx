@@ -98,6 +98,18 @@ export default function Sidebar({
           </svg>
           <span className={s.name}>Search photos</span>
         </Link>
+        <Link
+          href="/studio"
+          className={s.item}
+          onClick={onCloseMobile}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 3l1.9 4.6L18 9.5l-4.1 1.9L12 16l-1.9-4.6L6 9.5l4.1-1.9L12 3z" />
+            <path d="M19 14l.7 1.7 1.7.7-1.7.7-.7 1.7-.7-1.7-1.7-.7 1.7-.7L19 14z" />
+            <path d="M5 16l.5 1.2 1.2.5-1.2.5L5 19.4l-.5-1.2-1.2-.5 1.2-.5L5 16z" />
+          </svg>
+          <span className={s.name}>Studio</span>
+        </Link>
 
         <div className={s.spacer} />
         <div className={s.acct}>

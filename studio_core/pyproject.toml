@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "studio_core"
+version = "0.1.0"
+description = "Shared core for parts_photos Studio: prompt building, codex runner, article matching"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.setuptools]
+packages = ["studio_core"]
+package-dir = {"" = "src"}

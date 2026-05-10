@@ -12,6 +12,16 @@ class InvalidImage(Exception):
     """Raised when bytes can't be decoded as an image. Caller maps to HTTP 400."""
 
 
+def _open_pil_from_bytes(raw: bytes) -> Image.Image:
+    """Decode raw bytes into a Pillow Image (already loaded). Raises InvalidImage."""
+    try:
+        img = Image.open(io.BytesIO(raw))
+        img.load()
+        return img
+    except (UnidentifiedImageError, OSError, SyntaxError) as e:
+        raise InvalidImage(f"could not decode image: {e}") from e
+
+
 def to_jpeg(raw: bytes, source_mime: str) -> bytes:
     """Decode raw bytes (jpeg/png/heic/etc.), re-encode as JPEG.
 

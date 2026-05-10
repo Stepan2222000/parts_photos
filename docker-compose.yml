@@ -15,8 +15,39 @@ services:
       MINIO_SECURE: "false"
       WEB_ORIGIN: http://2.26.53.128:3100
       API_PORT: "8001"
+      STUDIO_MINIO_BUCKET: parts-photos-studio
+      STUDIO_MINIO_PUBLIC_BASE: http://2.26.53.128:9000/parts-photos-studio
     networks:
       - db_default
+
+  studio-worker:
+    image: ghcr.io/stepan2222000/parts-photos-api:${IMAGE_TAG:-latest}
+    container_name: parts_photos_studio_worker
+    restart: unless-stopped
+    command: ["python", "-m", "app.studio.worker"]
+    environment:
+      PG_DSN: postgresql://admin:Password123@parts_photos:5432/parts_photos
+      MINIO_ENDPOINT: 2.26.53.128:9000
+      MINIO_ACCESS_KEY: admin
+      MINIO_SECRET_KEY: Password123
+      MINIO_BUCKET: parts-photos
+      MINIO_PUBLIC_BASE: http://2.26.53.128:9000/parts-photos
+      MINIO_SECURE: "false"
+      STUDIO_MINIO_BUCKET: parts-photos-studio
+      STUDIO_MINIO_PUBLIC_BASE: http://2.26.53.128:9000/parts-photos-studio
+      STUDIO_MIN_WORKERS: "2"
+      STUDIO_MAX_WORKERS: "10"
+      STUDIO_LOG_LEVEL: INFO
+      HOME: /root
+    volumes:
+      # Run `codex login` once on the host as root: that creates
+      # /root/.codex/auth.json with the ChatGPT subscription token. Mounted RW
+      # because codex periodically refreshes the token.
+      - /root/.codex:/root/.codex
+    networks:
+      - db_default
+    depends_on:
+      - api
 
   web:
     image: ghcr.io/stepan2222000/parts-photos-web:${IMAGE_TAG:-latest}

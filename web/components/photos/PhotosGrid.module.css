@@ -48,22 +48,29 @@
   opacity: 0; transition: opacity 150ms ease;
 }
 .tile:hover .tileActions { opacity: 1; }
-.tileActions button {
+.tileActions button,
+.tileActions a {
   width: 32px; height: 32px;
   background: var(--photo-overlay);
   color: #fff;
   border: none; border-radius: 6px;
   cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center;
+  text-decoration: none;
 }
-.tileActions button:hover { background: rgba(0,0,0,0.85); }
-.tileActions button svg { width: 14px; height: 14px; }
+.tileActions button:hover,
+.tileActions a:hover { background: rgba(0,0,0,0.85); }
+.tileActions a:hover { background: var(--brand-coral); }
+.tileActions button svg,
+.tileActions a svg { width: 14px; height: 14px; }
 .danger:hover { background: var(--error-product) !important; }
 
 @media (hover: none) {
   .tileActions { opacity: 1; }
-  .tileActions button { width: 40px; height: 40px; border-radius: 8px; }
-  .tileActions button svg { width: 16px; height: 16px; }
+  .tileActions button,
+  .tileActions a { width: 40px; height: 40px; border-radius: 8px; }
+  .tileActions button svg,
+  .tileActions a svg { width: 16px; height: 16px; }
 }
 
 .failedMark {
