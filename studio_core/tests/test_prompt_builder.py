@@ -15,13 +15,35 @@ def test_defaults_match_option_keys() -> None:
             assert v is False, f"option {k} should default to False"
 
 
-def test_build_prompt_includes_legend_and_lockdown() -> None:
+def test_build_prompt_includes_legend_and_rules() -> None:
     p = build_prompt(defaults())
     assert "Изображение 1: исходное фото товара" in p
-    assert "Жёсткие инварианты" in p
-    assert "ФИНАЛЬНЫЙ ЛОКДАУН" in p
+    assert "Стандартные правила редактирования" in p
+    assert "приоритет за инструкциями пользователя" in p
+    assert "Дополнительные подсказки по качеству" in p
     assert "ЧТО НЕЛЬЗЯ МЕНЯТЬ:" in p
     assert "ЧТО НУЖНО СДЕЛАТЬ:" in p
+
+
+def test_user_prompt_takes_priority_over_defaults() -> None:
+    p = build_prompt(defaults(), custom_prompt="сделай фон красным")
+    # лейбл «дополнительные инструкции» помечен как приоритетный
+    assert "имеют приоритет над стандартными правилами" in p
+    # больше нет строк, говорящих что lockdown побеждает пользователя
+    assert "побеждает локдаун" not in p
+    assert "ФИНАЛЬНЫЙ ЛОКДАУН" not in p
+
+
+def test_dirt_cleaning_does_not_remove_store_stickers() -> None:
+    opts = defaults()
+    opts[OptionKey.CLEAN_PART_DIRT.value] = True
+    p = build_prompt(opts)
+    # явно сказано что наклейки магазинов и ценники остаются
+    assert "Наклейки магазинов и ценники" in p
+    # do-блок чистки грязи тоже не упоминает их
+    do_section_idx = p.index("Почисти запчасть от грязи")
+    do_section = p[do_section_idx : do_section_idx + 600]
+    assert "наклейки магазинов" not in do_section.lower() or "не грязь" in do_section.lower()
 
 
 def test_replace_bg_adds_image_2_legend() -> None:
@@ -80,12 +102,12 @@ def test_substitute_date_uses_today() -> None:
     assert "цель около 2026-02-09" in p
 
 
-def test_custom_prompt_inserted_before_final_lockdown() -> None:
+def test_custom_prompt_inserted_before_quality_hints() -> None:
     p = build_prompt(defaults(), custom_prompt="оставь синий оттенок")
     assert "ДОПОЛНИТЕЛЬНЫЕ ИНСТРУКЦИИ ПОЛЬЗОВАТЕЛЯ" in p
     user_idx = p.index("ДОПОЛНИТЕЛЬНЫЕ ИНСТРУКЦИИ ПОЛЬЗОВАТЕЛЯ")
-    final_idx = p.index("ФИНАЛЬНЫЙ ЛОКДАУН")
-    assert user_idx < final_idx
+    hints_idx = p.index("Дополнительные подсказки по качеству")
+    assert user_idx < hints_idx
     assert "оставь синий оттенок" in p
 
 
@@ -114,7 +136,7 @@ def test_add_watermark_legend_when_enabled() -> None:
 def test_unknown_option_keys_dropped() -> None:
     opts = defaults() | {"some_unknown_key": True, "also_invalid": False}
     p = build_prompt(opts)  # не должно падать
-    assert "ФИНАЛЬНЫЙ ЛОКДАУН" in p
+    assert "Дополнительные подсказки по качеству" in p
 
 
 def test_aspect_ratio_instruction_present() -> None:
