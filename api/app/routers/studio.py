@@ -14,7 +14,7 @@ from studio_core.options import OPTION_KEYS, coerce_options
 
 from ..config import settings
 from ..db import pool
-from ..images import InvalidImage, _open_pil_from_bytes
+from ..images import InvalidImage, _open_pil_from_bytes, ensure_codex_compatible
 from ..minio_client import public_url
 from ..models import Photo
 from ..studio.article_match_db import find_matches
@@ -47,20 +47,27 @@ ASSET_KIND_BG = "backgrounds"
 ASSET_KIND_WM = "watermarks"
 
 
-def _decode_asset(raw: bytes, source_mime: str) -> tuple[bytes, str, int, int]:
-    """Decode an uploaded asset to PNG/JPEG bytes + dimensions.
+def _decode_asset(
+    raw: bytes, source_mime: str, *, prefer_png: bool
+) -> tuple[bytes, str, str, int, int]:
+    """Normalize an uploaded asset to a codex-compatible format.
 
-    Backgrounds keep their format (jpeg or png). Watermarks are forced to PNG
-    so alpha is preserved.
+    Returns (data, content_type, ext, width, height). HEIC and other
+    unsupported formats are converted (JPEG by default, PNG for watermarks
+    so alpha is preserved). JPEG/PNG/WebP pass through.
     """
     try:
-        with _open_pil_from_bytes(raw) as img:
-            w, h = img.size
-            return raw, source_mime or "application/octet-stream", w, h
+        data, mime, ext = ensure_codex_compatible(
+            raw, source_mime, prefer_png=prefer_png
+        )
     except InvalidImage as e:
         raise HTTPException(400, str(e))
-    except Exception as e:
-        raise HTTPException(400, f"Could not decode image: {e}")
+    try:
+        with _open_pil_from_bytes(data) as img:
+            w, h = img.size
+    except InvalidImage as e:
+        raise HTTPException(400, str(e))
+    return data, mime, ext, w, h
 
 
 def _row_to_asset(r: dict, kind: str) -> StudioAsset:
@@ -204,16 +211,14 @@ async def _upload_asset(file: UploadFile, *, table: str, prefix: str) -> StudioA
             400,
             f"File too large: {len(raw)} bytes, max {settings.studio_max_source_bytes}",
         )
-    data, content_type, w, h = _decode_asset(raw, file.content_type or "")
+    # Watermarks keep alpha → PNG. Backgrounds are full-frame textures → JPEG.
+    prefer_png = prefix == "watermarks"
+    data, content_type, ext, w, h = _decode_asset(
+        raw, file.content_type or "", prefer_png=prefer_png
+    )
     asset_id = uuid4()
-    suffix = (file.filename or "").lower()
-    ext = "png"
-    if suffix.endswith((".jpg", ".jpeg")):
-        ext = "jpg"
-    elif suffix.endswith(".webp"):
-        ext = "webp"
     s3_key = f"{prefix}/{asset_id}.{ext}"
-    put_bytes(s3_key, data, content_type or "application/octet-stream")
+    put_bytes(s3_key, data, content_type)
     row = await pool().fetchrow(
         f"""
         INSERT INTO {table} (id, name, s3_key, width, height, size_bytes)
@@ -289,8 +294,9 @@ async def create_batch(
     if not photo_ids and not file_list:
         raise HTTPException(400, "Batch needs at least one source (file or collage photo)")
 
-    # decode + size-check uploads (no resize per spec)
-    upload_payloads: list[tuple[str, str, bytes]] = []  # (filename, mime, bytes)
+    # decode + normalize uploads. HEIC and other non-(jpeg/png/webp) inputs
+    # are converted to JPEG so codex doesn't 400 on us. No resize.
+    upload_payloads: list[tuple[str, str, str, bytes]] = []  # (filename, mime, ext, bytes)
     for f in file_list:
         raw = await f.read()
         if not raw:
@@ -302,11 +308,12 @@ async def create_batch(
                 f"{settings.studio_max_source_bytes} (gpt-image-2 limit)",
             )
         try:
-            with _open_pil_from_bytes(raw):
-                pass
-        except Exception as e:
-            raise HTTPException(400, f"{f.filename}: cannot decode image: {e}")
-        upload_payloads.append((f.filename, f.content_type or "application/octet-stream", raw))
+            data, mime, ext = ensure_codex_compatible(
+                raw, f.content_type or "", prefer_png=False
+            )
+        except InvalidImage as e:
+            raise HTTPException(400, f"{f.filename}: {e}")
+        upload_payloads.append((f.filename, mime, ext, data))
 
     # validate referenced assets / collage exist
     async with pool().acquire() as conn:
@@ -377,9 +384,11 @@ async def create_batch(
             )
 
             # Upload + insert jobs for fresh files
-            for filename, mime, data in upload_payloads:
+            for filename, mime, ext, data in upload_payloads:
                 job_id = uuid4()
-                src_key = f"uploads/{batch_id}/{job_id}{_ext_from_filename(filename)}"
+                # ext from ensure_codex_compatible(): always one of jpg/png/webp,
+                # never the original heic/etc.
+                src_key = f"uploads/{batch_id}/{job_id}.{ext}"
                 # synchronous put — we are already inside a TX but MinIO call
                 # is independent of the DB transaction
                 put_bytes(src_key, data, mime)
@@ -413,14 +422,6 @@ async def create_batch(
                 )
 
     return _row_to_batch(dict(batch_row))
-
-
-def _ext_from_filename(filename: str) -> str:
-    s = filename.lower()
-    for ext in (".jpg", ".jpeg", ".png", ".webp", ".heic"):
-        if s.endswith(ext):
-            return ext
-    return ""
 
 
 @router.get("/batches", response_model=list[StudioBatch])
