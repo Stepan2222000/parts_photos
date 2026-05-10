@@ -4,6 +4,7 @@ api.app.minio_client which is hard-coded to the photos bucket.
 from __future__ import annotations
 
 import io
+import json
 from pathlib import Path
 
 from minio import Minio
@@ -31,8 +32,36 @@ def studio_url(s3_key: str) -> str:
     return f"{_public_base()}/{s3_key}"
 
 
+def _public_read_policy(bucket: str) -> str:
+    """Same anonymous-read shape as the legacy `parts-photos` bucket: clients
+    can list the bucket and GET any object without auth, but cannot mutate.
+    """
+    return json.dumps(
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {"AWS": ["*"]},
+                    "Action": ["s3:GetBucketLocation", "s3:ListBucket"],
+                    "Resource": [f"arn:aws:s3:::{bucket}"],
+                },
+                {
+                    "Effect": "Allow",
+                    "Principal": {"AWS": ["*"]},
+                    "Action": ["s3:GetObject"],
+                    "Resource": [f"arn:aws:s3:::{bucket}/*"],
+                },
+            ],
+        }
+    )
+
+
 def ensure_bucket(client: Minio | None = None) -> None:
-    """Create the Studio bucket if it does not exist. Idempotent."""
+    """Create the Studio bucket if it does not exist + apply public-read
+    policy so the web frontend can render images without signed URLs.
+    Idempotent on both create and policy.
+    """
     c = client or photos_client()
     bucket = studio_bucket()
     try:
@@ -41,6 +70,7 @@ def ensure_bucket(client: Minio | None = None) -> None:
     except S3Error as e:
         if "BucketAlreadyOwnedByYou" not in str(e):
             raise
+    c.set_bucket_policy(bucket, _public_read_policy(bucket))
 
 
 def put_bytes(s3_key: str, data: bytes, content_type: str) -> None:
