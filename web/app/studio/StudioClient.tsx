@@ -153,13 +153,25 @@ export default function StudioClient({
     };
   }, [activeBatchId]);
 
+  // ── Auto-pick first asset when toggle turns on ────────────────────────────
+  useEffect(() => {
+    if (options.replace_bg && bgId === null && backgrounds.length > 0) {
+      setBgId(backgrounds[0].id);
+    }
+  }, [options.replace_bg, bgId, backgrounds]);
+  useEffect(() => {
+    if (options.add_watermark && wmId === null && watermarks.length > 0) {
+      setWmId(watermarks[0].id);
+    }
+  }, [options.add_watermark, wmId, watermarks]);
+
   // ── Submit ────────────────────────────────────────────────────────────────
   const sourceCount = files.length + collagePhotos.length;
-  const submittable =
-    !submitting &&
-    sourceCount > 0 &&
-    (!options.replace_bg || bgId !== null) &&
-    (!options.add_watermark || wmId !== null);
+  const missing: string[] = [];
+  if (sourceCount === 0) missing.push("фото");
+  if (options.replace_bg && bgId === null) missing.push("фон");
+  if (options.add_watermark && wmId === null) missing.push("вотермарк");
+  const submittable = !submitting && missing.length === 0;
 
   async function handleSubmit() {
     if (!submittable) return;
@@ -316,9 +328,9 @@ export default function StudioClient({
             >
               {submitting
                 ? "Запускаю…"
-                : sourceCount === 0
-                  ? "Добавь фото для запуска"
-                  : `Generate (${sourceCount} фото)`}
+                : missing.length > 0
+                  ? `Не хватает: ${missing.join(", ")}`
+                  : `Generate (${sourceCount} ${sourceCount === 1 ? "фото" : "фото"})`}
             </button>
           </>
         )}
