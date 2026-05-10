@@ -7,7 +7,8 @@ class OptionKey(StrEnum):
     REPLACE_BG = "replace_bg"
     IMPROVE_LIGHTING = "improve_lighting"
     STRAIGHTEN_BOX = "straighten_box"
-    FIX_PART_MICRODEFECTS = "fix_part_microdefects"
+    FIX_PART_DEFECTS = "fix_part_defects"
+    CLEAN_PART_DIRT = "clean_part_dirt"
     REDO_LABELS = "redo_labels"
     SUBSTITUTE_DATE = "substitute_date"
     REMOVE_EXTRAS = "remove_extras"
@@ -22,7 +23,8 @@ OPTION_LABELS: dict[OptionKey, str] = {
     OptionKey.REPLACE_BG: "Replace background",
     OptionKey.IMPROVE_LIGHTING: "Improve lighting",
     OptionKey.STRAIGHTEN_BOX: "Straighten packaging",
-    OptionKey.FIX_PART_MICRODEFECTS: "Remove micro-defects on the part",
+    OptionKey.FIX_PART_DEFECTS: "Fix part defects (dents, scratches)",
+    OptionKey.CLEAN_PART_DIRT: "Clean dirt off the part",
     OptionKey.REDO_LABELS: "Flatten wrinkled labels",
     OptionKey.SUBSTITUTE_DATE: "Substitute date on label",
     OptionKey.REMOVE_EXTRAS: "Remove extra objects in frame",
@@ -35,7 +37,8 @@ _DEFAULTS: dict[OptionKey, bool] = {
     OptionKey.REPLACE_BG: False,
     OptionKey.IMPROVE_LIGHTING: False,
     OptionKey.STRAIGHTEN_BOX: False,
-    OptionKey.FIX_PART_MICRODEFECTS: False,
+    OptionKey.FIX_PART_DEFECTS: False,
+    OptionKey.CLEAN_PART_DIRT: False,
     OptionKey.REDO_LABELS: False,
     OptionKey.SUBSTITUTE_DATE: False,
     OptionKey.REMOVE_EXTRAS: False,

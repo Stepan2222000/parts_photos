@@ -41,7 +41,8 @@ def test_unselected_options_appear_as_skip_lines() -> None:
     assert "НЕ меняй фон" in p
     assert "НЕ меняй освещение" in p
     assert "НЕ меняй форму упаковки" in p
-    assert "НЕ меняй поверхность запчасти" in p
+    assert "НЕ убирай царапины" in p
+    assert "НЕ чисти запчасть от грязи" in p
     assert "НЕ меняй наклейки и этикетки" in p
     assert "НЕ меняй ни одну дату" in p
     assert "НЕ убирай из кадра" in p
@@ -49,6 +50,24 @@ def test_unselected_options_appear_as_skip_lines() -> None:
     assert "НЕ добавляй никаких собственных вотермарок" in p
     # CHANGES TO PERFORM пустая
     assert "(ничего — применяются только локдауны)" in p
+
+
+def test_dirt_and_defects_are_independent() -> None:
+    # Грязь и царапины — разные понятия. Включаем чистку грязи, дефекты OFF.
+    opts = {k.value: False for k in OPTION_KEYS_ORDER}
+    opts[OptionKey.CLEAN_PART_DIRT.value] = True
+    p = build_prompt(opts)
+    # включена чистка грязи
+    assert "Почисти запчасть от грязи" in p
+    # дефекты по-прежнему явно запрещены к удалению
+    assert "НЕ убирай царапины, вмятины" in p
+
+    # обратный случай
+    opts2 = {k.value: False for k in OPTION_KEYS_ORDER}
+    opts2[OptionKey.FIX_PART_DEFECTS.value] = True
+    p2 = build_prompt(opts2)
+    assert "Убери физические дефекты" in p2
+    assert "НЕ чисти запчасть от грязи" in p2
 
 
 def test_substitute_date_uses_today() -> None:
