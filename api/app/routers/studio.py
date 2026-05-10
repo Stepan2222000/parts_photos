@@ -557,12 +557,15 @@ async def _do_transfer(job_id: UUID, collage_id: UUID) -> Photo:
             )
             if job is None:
                 raise HTTPException(404, "Job not found")
+            if job["transferred_to_photo_id"] is not None:
+                # Check transferred BEFORE result_s3_key — once transferred,
+                # result_s3_key is cleared, so the absent-result check would
+                # mask the actual reason.
+                raise HTTPException(409, "Job already transferred")
             if job["status"] != "succeeded":
                 raise HTTPException(400, f"Job not succeeded ({job['status']})")
             if job["result_s3_key"] is None:
                 raise HTTPException(400, "Job has no result image")
-            if job["transferred_to_photo_id"] is not None:
-                raise HTTPException(409, "Job already transferred")
 
             collage = await conn.fetchrow(
                 "SELECT id, group_id FROM photo_collages WHERE id = $1", collage_id
