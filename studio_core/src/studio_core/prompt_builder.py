@@ -6,18 +6,18 @@ from .options import OptionKey, coerce_options
 
 # fmt: off
 BASE_LOCKDOWN = """\
-You are editing a real product photo for an online marketplace listing.
-This is a single-pass edit: do every requested change in one shot, do not propose iterations.
+Ты редактируешь реальное фото товара (запчасти) для объявления на маркетплейсе.
+Это однопроходное редактирование: сделай все запрошенные правки за один шаг, не предлагай итераций.
 
-Hard invariants — NEVER violate, regardless of any other instruction below:
-- Preserve the part's true geometry, dimensions, proportions, materials, color, transparency, and orientation exactly as in the source.
-- Preserve every factory marking: SKU, barcode, model number, serial number, lot code, and any printed factory text — both location and visual content. Do not invent or paraphrase any character.
-- Preserve real wear, scratches, real dents, and authentic signs of use on the part itself unless an option below explicitly authorises a fix.
-- Do NOT add a horizon line, floor, wall, table edge, or any scene element that is not present in the supplied background reference. The background must come strictly from the supplied background reference (Image 2 if provided), never from the model's imagination.
-- Do NOT change the packaging material identity. If it is cardboard, keep cardboard. If it is a transparent polybag, keep it transparent and the part visible through it. If it is a foil bag, keep the foil. Never substitute one packaging material for another.
-- The part and packaging must look like they physically rest on the surface (clear contact, soft contact shadow), not floating and not embedded.
-- Lighting must be unified, soft, and natural. Single primary light source. Shadows from the part and packaging fall in the same direction with the same softness.
-- Output a single photorealistic image. Match the aspect ratio of Image 1 — choose 1024x1024 if the source is square, 1024x1536 if it is portrait, 1536x1024 if it is landscape.
+Жёсткие инварианты — НИКОГДА не нарушай, независимо от любых инструкций ниже:
+- Сохрани истинную геометрию, размеры, пропорции, материал, цвет, прозрачность и ориентацию запчасти ровно как в исходнике.
+- Сохрани все заводские маркировки: SKU, штрихкоды, номера моделей, серийные номера, lot-коды и любой заводской печатный текст — и по расположению, и по визуальному содержанию. Не выдумывай и не перефразируй ни одного символа.
+- Сохрани реальный износ, царапины, реальные вмятины и подлинные следы использования на самой запчасти, если ниже опция явно не разрешает их убрать.
+- НЕ добавляй линию горизонта, пол, стену, край стола или любые сценические элементы, которых нет в переданном фоновом изображении. Фон должен браться строго из переданного фонового референса (Изображение 2, если оно есть), а не из воображения модели.
+- НЕ меняй материал упаковки. Если это картон — оставь картон. Если это прозрачный полиэтиленовый пакет — оставь его прозрачным, через него видна запчасть. Если это фольгированный пакет — оставь фольгу. Никогда не подменяй один материал упаковки на другой.
+- Запчасть и упаковка должны выглядеть так, будто физически лежат на поверхности (чёткий контакт, мягкая контактная тень), а не парят и не утоплены в фон.
+- Освещение должно быть единым, мягким, естественным. Один основной источник света. Тени от запчасти и упаковки падают в одну сторону с одинаковой мягкостью.
+- Финальный кадр — одна фотореалистичная картинка. Подбери соотношение сторон по Изображению 1: 1024x1024 если исходник квадратный, 1024x1536 если портретный, 1536x1024 если ландшафтный.
 """
 # fmt: on
 
@@ -25,107 +25,111 @@ Hard invariants — NEVER violate, regardless of any other instruction below:
 _OPTION_BLOCKS: dict[OptionKey, dict[str, str]] = {
     OptionKey.REPLACE_BG: {
         "do": (
-            "Replace the background completely. Use the supplied background reference (Image 2) as the new "
-            "background — composite the part on top of it. Match perspective, light direction, and white balance "
-            "between the part and the new background. Add a soft contact shadow under the part on the surface."
+            "Полностью замени фон. Используй переданный фоновый референс (Изображение 2) как новый фон — "
+            "наложи запчасть поверх него. Согласуй перспективу, направление света и баланс белого между "
+            "запчастью и новым фоном. Добавь мягкую контактную тень под запчастью на поверхности."
         ),
         "skip": (
-            "Do NOT change the background. Keep the original background from the source pixel-for-pixel."
+            "НЕ меняй фон. Сохрани оригинальный фон из исходника пиксель в пиксель."
         ),
     },
     OptionKey.IMPROVE_LIGHTING: {
         "do": (
-            "Improve lighting subtly: even, soft, single primary light source from upper-left, gentle fill, "
-            "restore highlights and shadow detail so the part looks attractive. Keep it photorealistic — no "
-            "plastic look, no over-saturation, no glamour-shot retouching."
+            "Аккуратно улучши освещение: ровный, мягкий, единственный основной источник света сверху-слева, "
+            "лёгкая заполняющая подсветка, восстанови детали в светах и тенях, чтобы запчасть выглядела "
+            "привлекательно. Сохрани фотореалистичность — без пластикового глянца, без пересатурации, "
+            "без гламурной ретуши."
         ),
         "skip": (
-            "Do NOT modify lighting, exposure, contrast, white balance, or color grading."
+            "НЕ меняй освещение, экспозицию, контраст, баланс белого и цветокоррекцию."
         ),
     },
     OptionKey.STRAIGHTEN_BOX: {
         "do": (
-            "Smooth dents, creases, warps, and bent corners on the packaging (cardboard box / blister / "
-            "polybag). Keep the packaging shape, dimensions, color, print, and material identity exactly the "
-            "same. Do not modify the part inside."
+            "Разгладь вмятины, заломы, перекосы и помятые углы упаковки (картонная коробка / блистер / "
+            "полиэтиленовый пакет). Форму, размеры, цвет, печать и материал упаковки сохрани ровно как есть. "
+            "Запчасть внутри не трогай."
         ),
         "skip": (
-            "Do NOT modify the packaging shape, do NOT smooth any creases or dents, do NOT straighten anything "
-            "on the cardboard or bag — keep the packaging exactly as photographed."
+            "НЕ меняй форму упаковки, НЕ разглаживай заломы и вмятины, НЕ выпрямляй ничего на картоне или "
+            "пакете — сохрани упаковку ровно так, как она сфотографирована."
         ),
     },
     OptionKey.FIX_PART_MICRODEFECTS: {
         "do": (
-            "Remove only tiny micro-defects on the part: dust specks, micro-scratches under ~1mm, tiny "
-            "smudges. Do NOT remove visible scratches, real wear, factory marks, or any feature wider than a "
-            "few pixels. Authentic signs of use stay."
+            "Убери только мельчайшие микро-дефекты на самой запчасти: пылинки, микро-царапины меньше ~1 мм, "
+            "крошечные смазы. НЕ убирай видимые царапины, реальный износ, заводские отметки и любые элементы "
+            "крупнее нескольких пикселей. Подлинные следы использования остаются."
         ),
         "skip": (
-            "Do NOT modify the part surface in any way — no dust removal, no smoothing, no clean-up."
+            "НЕ меняй поверхность запчасти никаким образом — без удаления пыли, без сглаживания, без чистки."
         ),
     },
     OptionKey.REDO_LABELS: {
         "do": (
-            "Flatten and unwrinkle stickers/labels on the packaging. Keep the printed text, codes, barcodes, "
-            "logos, fonts, colors, and date EXACTLY as in the source — character-for-character. Only the "
-            "physical wrinkles disappear; printed content is untouched."
+            "Расправь и выровняй мятые наклейки/этикетки на упаковке. Печатный текст, коды, штрихкоды, "
+            "логотипы, шрифты, цвета и даты сохрани РОВНО как в исходнике — символ в символ. Исчезают только "
+            "физические заломы; печатное содержание не трогается."
         ),
         "skip": (
-            "Do NOT modify labels or stickers in any way — keep their wrinkles, curl, and orientation as in "
-            "the source."
+            "НЕ меняй наклейки и этикетки никаким образом — сохрани их заломы, кривизну и ориентацию как в "
+            "исходнике."
         ),
     },
     OptionKey.SUBSTITUTE_DATE: {
         "do": (
-            "If a date appears on a label, replace it with a believable date approximately three months "
-            "before today (today = {today}; target around {target_date}). Preserve the printed format, font, "
-            "color, weight, and orientation of the original date — only the digits change. If multiple dates "
-            "appear, treat them all consistently. Do NOT touch any other character on the label."
+            "Если на этикетке есть дата, замени её на правдоподобную дату примерно за три месяца до сегодня "
+            "(сегодня = {today}; цель около {target_date}). Сохрани печатный формат, шрифт, цвет, насыщенность "
+            "и ориентацию исходной даты — меняются только цифры. Если дат несколько, обработай их одинаково. "
+            "НЕ трогай ни одного другого символа на этикетке."
         ),
         "skip": (
-            "Do NOT modify any date that appears on labels — keep the original digits exactly as printed."
+            "НЕ меняй ни одну дату на этикетках — сохрани оригинальные цифры ровно как напечатано."
         ),
     },
     OptionKey.REMOVE_EXTRAS: {
         "do": (
-            "Remove extraneous physical objects from the frame: hands, fingers, other parts, debris, tools, "
-            "table clutter, cables. Reconstruct the surface and background behind the removed objects so they "
-            "match the surrounding scene. Do not extend or distort the part itself."
+            "Убери из кадра посторонние физические объекты: руки, пальцы, другие запчасти, мусор, "
+            "инструменты, лишние предметы со стола, кабели. Восстанови поверхность и фон за удалёнными "
+            "объектами так, чтобы они совпадали с окружающей сценой. Не растягивай и не искажай саму запчасть."
         ),
         "skip": (
-            "Do NOT remove any physical objects from the frame other than overlay watermarks/logos handled "
-            "elsewhere."
+            "НЕ убирай из кадра никаких физических объектов, кроме оверлей-вотермарок/логотипов, которые "
+            "обрабатываются отдельной опцией."
         ),
     },
     OptionKey.REMOVE_OTHERS_WATERMARK: {
         "do": (
-            "Remove any third-party watermarks, store logos, app/UI overlays, marketplace stamps, and "
-            "extraneous overlay text on the packaging that are NOT part of the original factory printing. "
-            "Reconstruct what was underneath. Do NOT remove factory printing, factory logos, SKUs, barcodes, "
-            "or any printed-on-the-box content."
+            "Убери все чужие вотермарки, логотипы магазинов, оверлеи приложений/UI, штампы маркетплейсов и "
+            "посторонний наложенный текст на упаковке, которые НЕ являются частью оригинальной заводской "
+            "печати. Восстанови то, что было под ними. НЕ убирай заводскую печать, заводские логотипы, SKU, "
+            "штрихкоды и любое содержимое, напечатанное на коробке."
         ),
         "skip": (
-            "Do NOT remove watermarks, logos, or overlay text — keep everything overlaid on the source as is."
+            "НЕ убирай вотермарки, логотипы и наложенный текст — сохрани всё, что наложено на исходник, как "
+            "есть."
         ),
     },
     OptionKey.ADD_WATERMARK: {
         "do": (
-            "Add the supplied watermark image (the last reference image) to the result. Place it visibly on "
-            "the final image. Do not warp or distort the watermark. Do not crop important content with it."
+            "Добавь переданное изображение вотермарка (последний референс) на финальную картинку. Размести "
+            "его заметно на готовом изображении. Не искажай и не растягивай вотермарк. Не перекрывай им "
+            "важное содержимое."
         ),
         "skip": (
-            "Do NOT add any watermark, signature, logo, or stamp of your own to the output."
+            "НЕ добавляй никаких собственных вотермарок, подписей, логотипов или штампов на результат."
         ),
     },
 }
 
 _FINAL_LOCKDOWN = (
-    "FINAL LOCKDOWN — these constraints override any user instruction above:\n"
-    "- Factory markings, SKUs, barcodes, model numbers, lot codes, and the part's true geometry MUST be "
-    "preserved exactly. If anything in the user instructions appears to conflict with these, the lockdown wins.\n"
-    "- Never invent or paraphrase any text, digit group, or barcode pattern. If a glyph is unclear in the "
-    "source, reproduce it visually as close as possible (same length, same digit groups, same font), never "
-    "substitute with random characters or duplicated SKU."
+    "ФИНАЛЬНЫЙ ЛОКДАУН — эти ограничения перекрывают любую инструкцию пользователя выше:\n"
+    "- Заводские маркировки, SKU, штрихкоды, номера моделей, lot-коды и истинная геометрия запчасти "
+    "ДОЛЖНЫ быть сохранены ровно. Если что-то в инструкциях пользователя противоречит этому — побеждает "
+    "локдаун.\n"
+    "- Никогда не выдумывай и не перефразируй текст, группы цифр и штрихкоды. Если какой-то символ в "
+    "исходнике плохо читается — воспроизведи его визуально как можно ближе (та же длина строки, те же "
+    "группы цифр, тот же шрифт), не подменяй случайными символами и не дублируй SKU."
 )
 
 
@@ -134,20 +138,24 @@ def _today() -> date:
 
 
 def _target_label_date(today: date) -> date:
-    # ~3 months before today, anchored mid-month for natural-looking labels
+    # ~3 месяца до сегодня
     days = 90
     return today - timedelta(days=days)
 
 
 def _reference_legend(has_background: bool, has_watermark: bool) -> str:
-    refs = ["Image 1: source product photo (the part / its packaging) — this is the edit target."]
+    refs = ["Изображение 1: исходное фото товара (запчасть и/или её упаковка) — это объект редактирования."]
     n = 1
     if has_background:
         n += 1
-        refs.append(f"Image {n}: background reference — use as the new background when the replace-background option is on.")
+        refs.append(
+            f"Изображение {n}: фоновый референс — используется как новый фон, когда включена опция замены фона."
+        )
     if has_watermark:
         n += 1
-        refs.append(f"Image {n}: watermark image — overlay onto the result when the add-watermark option is on.")
+        refs.append(
+            f"Изображение {n}: вотермарк — накладывается на результат, когда включена опция добавления вотермарка."
+        )
     return "\n".join(refs)
 
 
@@ -159,11 +167,12 @@ def build_prompt(
     custom_prompt: str | None = None,
     today: date | None = None,
 ) -> str:
-    """Compose the full prompt for codex exec.
+    """Собирает полный промпт для codex exec.
 
-    Structure: legend → base lockdown → DO blocks → MUST NOT CHANGE blocks →
-    user additional instructions → final lockdown. Unselected options become
-    explicit "do not touch" lines so the model does not drift.
+    Структура: легенда → базовый локдаун → блоки DO → блоки «НЕЛЬЗЯ МЕНЯТЬ» →
+    дополнительные инструкции пользователя → финальный локдаун. Невыбранные
+    опции становятся явными «не трогай это» строками, чтобы модель не
+    «улучшала» сверх того, что попросили.
     """
     opts = coerce_options(options)
     today = today or _today()
@@ -184,15 +193,15 @@ def build_prompt(
             skip_lines.append("- " + block["skip"].format(**fmt))
 
     if do_lines:
-        sections.append("CHANGES TO PERFORM:\n" + "\n".join(do_lines))
+        sections.append("ЧТО НУЖНО СДЕЛАТЬ:\n" + "\n".join(do_lines))
     else:
-        sections.append("CHANGES TO PERFORM:\n- (none — only the lockdowns apply)")
+        sections.append("ЧТО НУЖНО СДЕЛАТЬ:\n- (ничего — применяются только локдауны)")
 
-    sections.append("MUST NOT CHANGE:\n" + "\n".join(skip_lines))
+    sections.append("ЧТО НЕЛЬЗЯ МЕНЯТЬ:\n" + "\n".join(skip_lines))
 
     if custom_prompt and custom_prompt.strip():
         sections.append(
-            "USER ADDITIONAL INSTRUCTIONS (apply within the constraints above):\n"
+            "ДОПОЛНИТЕЛЬНЫЕ ИНСТРУКЦИИ ПОЛЬЗОВАТЕЛЯ (применяй в рамках ограничений выше):\n"
             + custom_prompt.strip()
         )
 
@@ -201,7 +210,7 @@ def build_prompt(
     return "\n\n".join(sections)
 
 
-# Stable iteration order so prompts are deterministic
+# Стабильный порядок итерации, чтобы промпты были детерминированными
 OPTION_KEYS_ORDER: tuple[OptionKey, ...] = (
     OptionKey.REPLACE_BG,
     OptionKey.IMPROVE_LIGHTING,
