@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import type {
@@ -36,6 +36,44 @@ interface Props {
   initialSourcePhotoId: string | null;
   initialTargetCollageId: string | null;
   initialBatchId: string | null;
+}
+
+// Same-shape detection so polling doesn't kick a referentially-fresh object
+// to React when nothing changed.
+function sameDetail(a: StudioBatchDetail | null, b: StudioBatchDetail): boolean {
+  if (!a || a.id !== b.id) return false;
+  if (a.status !== b.status || a.done !== b.done || a.failed !== b.failed) return false;
+  if (a.jobs.length !== b.jobs.length) return false;
+  for (let i = 0; i < a.jobs.length; i++) {
+    const ja = a.jobs[i], jb = b.jobs[i];
+    if (
+      ja.status !== jb.status ||
+      ja.result_s3_key !== jb.result_s3_key ||
+      ja.transferred_to_photo_id !== jb.transferred_to_photo_id
+    ) return false;
+  }
+  return true;
+}
+
+function patchBatch(prev: StudioBatch[], det: StudioBatchDetail): StudioBatch[] {
+  const idx = prev.findIndex((b) => b.id === det.id);
+  if (idx < 0) return prev;
+  const cur = prev[idx];
+  if (
+    cur.status === det.status &&
+    cur.done === det.done &&
+    cur.failed === det.failed &&
+    cur.finished_at === det.finished_at
+  ) return prev;
+  const next = [...prev];
+  next[idx] = { ...cur, status: det.status, done: det.done, failed: det.failed, finished_at: det.finished_at };
+  return next;
+}
+
+function submitButtonLabel(submitting: boolean, missing: string[], n: number): string {
+  if (submitting) return "Запускаю…";
+  if (missing.length > 0) return `Не хватает: ${missing.join(", ")}`;
+  return `Generate (${n} фото)`;
 }
 
 export default function StudioClient({
@@ -116,17 +154,13 @@ export default function StudioClient({
       try {
         const det = await api.studio.getBatch(activeBatchId!);
         if (!mounted) return;
-        setActiveBatch(det);
-        const lst = await api.studio.listBatches(50);
-        if (!mounted) return;
-        setBatches(lst);
+        setActiveBatch((prev) => sameDetail(prev, det) ? prev : det);
+        // Sync the rail row in-place — avoids re-fetching all 50 batches per tick.
+        setBatches((prev) => patchBatch(prev, det));
         if (det.status === "queued" || det.status === "running") {
           pollRef.current = window.setTimeout(tick, 2000);
         }
       } catch (e) {
-        // Surface the failure instead of silently re-trying. Common case:
-        // batch was deleted concurrently → 404. User sees the error and can
-        // pick another batch.
         if (mounted) {
           setError(`Не удалось загрузить батч: ${e}`);
           setActiveBatchId(null);
@@ -178,14 +212,12 @@ export default function StudioClient({
         files,
       });
       setActiveBatchId(batch.id);
-      setActiveBatch(null); // wait for polling fetch
-      // clear sources + custom prompt (but keep options + assets so user can iterate fast)
+      setActiveBatch(null);
       setFiles([]);
       setCollagePhotos([]);
       setCustomPrompt("");
-      // refresh batches list
-      const lst = await api.studio.listBatches(50);
-      setBatches(lst);
+      // Optimistic prepend — the poller will keep this row in sync.
+      setBatches((prev) => [batch, ...prev]);
     } catch (e) {
       setError(e instanceof ApiError ? `${e.status}: ${e.body}` : String(e));
     } finally {
@@ -194,6 +226,7 @@ export default function StudioClient({
   }
 
   function selectBatch(id: string | null) {
+    if (id === activeBatchId) return;
     setActiveBatchId(id);
     setActiveBatch(null);
   }
@@ -206,7 +239,6 @@ export default function StudioClient({
           activeId={activeBatchId}
           onSelect={selectBatch}
           onDelete={async (id) => {
-            const b = batches.find((x) => x.id === id);
             const transferred = (await api.studio.getBatch(id)).jobs.filter(
               (j) => j.transferred_to_photo_id,
             ).length;
@@ -215,9 +247,11 @@ export default function StudioClient({
               : "Удалить батч и все его результаты?";
             if (!confirm(msg)) return;
             await api.studio.deleteBatch(id);
-            if (activeBatchId === id) selectBatch(null);
-            const lst = await api.studio.listBatches(50);
-            setBatches(lst);
+            if (activeBatchId === id) {
+              setActiveBatchId(null);
+              setActiveBatch(null);
+            }
+            setBatches((prev) => prev.filter((b) => b.id !== id));
           }}
         />
       </aside>
@@ -316,11 +350,7 @@ export default function StudioClient({
               onClick={handleSubmit}
               disabled={!submittable}
             >
-              {submitting
-                ? "Запускаю…"
-                : missing.length > 0
-                  ? `Не хватает: ${missing.join(", ")}`
-                  : `Generate (${sourceCount} ${sourceCount === 1 ? "фото" : "фото"})`}
+              {submitButtonLabel(submitting, missing, sourceCount)}
             </button>
           </>
         )}

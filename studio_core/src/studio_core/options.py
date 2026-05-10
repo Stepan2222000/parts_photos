@@ -19,20 +19,6 @@ class OptionKey(StrEnum):
 OPTION_KEYS: tuple[OptionKey, ...] = tuple(OptionKey)
 
 
-OPTION_LABELS: dict[OptionKey, str] = {
-    OptionKey.REPLACE_BG: "Replace background",
-    OptionKey.IMPROVE_LIGHTING: "Improve lighting",
-    OptionKey.STRAIGHTEN_BOX: "Straighten packaging",
-    OptionKey.FIX_PART_DEFECTS: "Fix part defects (dents, scratches)",
-    OptionKey.CLEAN_PART_DIRT: "Clean dirt off the part",
-    OptionKey.REDO_LABELS: "Flatten wrinkled labels",
-    OptionKey.SUBSTITUTE_DATE: "Substitute date on label",
-    OptionKey.REMOVE_EXTRAS: "Remove extra objects in frame",
-    OptionKey.REMOVE_OTHERS_WATERMARK: "Remove third-party watermarks",
-    OptionKey.ADD_WATERMARK: "Add my watermark",
-}
-
-
 _DEFAULTS: dict[OptionKey, bool] = {
     OptionKey.REPLACE_BG: False,
     OptionKey.IMPROVE_LIGHTING: False,

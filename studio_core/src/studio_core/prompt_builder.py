@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from .options import OptionKey, coerce_options
+from .options import OPTION_KEYS, OptionKey, coerce_options
 
 # fmt: off
 BASE_LOCKDOWN = """\
@@ -199,7 +199,7 @@ def build_prompt(
     do_lines: list[str] = []
     skip_lines: list[str] = []
     fmt = {"today": today.isoformat(), "target_date": target.isoformat()}
-    for key in OPTION_KEYS_ORDER:
+    for key in OPTION_KEYS:
         block = _OPTION_BLOCKS[key]
         if opts[key]:
             do_lines.append("- " + block["do"].format(**fmt))
@@ -224,16 +224,6 @@ def build_prompt(
     return "\n\n".join(sections)
 
 
-# Стабильный порядок итерации, чтобы промпты были детерминированными
-OPTION_KEYS_ORDER: tuple[OptionKey, ...] = (
-    OptionKey.REPLACE_BG,
-    OptionKey.IMPROVE_LIGHTING,
-    OptionKey.STRAIGHTEN_BOX,
-    OptionKey.FIX_PART_DEFECTS,
-    OptionKey.CLEAN_PART_DIRT,
-    OptionKey.REDO_LABELS,
-    OptionKey.SUBSTITUTE_DATE,
-    OptionKey.REMOVE_EXTRAS,
-    OptionKey.REMOVE_OTHERS_WATERMARK,
-    OptionKey.ADD_WATERMARK,
-)
+# Stable iteration order = enum declaration order. Re-exported as
+# OPTION_KEYS_ORDER for tests that pre-date the consolidation.
+OPTION_KEYS_ORDER = OPTION_KEYS

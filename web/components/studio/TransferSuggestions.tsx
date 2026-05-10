@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import type { StudioBatchDetail } from "@/lib/types";
 import s from "./TransferSuggestions.module.css";
@@ -11,25 +11,27 @@ interface Props {
 }
 
 export default function TransferSuggestions({ batch, onTransferred }: Props) {
-  const candidates = useMemo(() => {
-    const out: { jobId: string; jobName: string; collageId: string; ownerId: string }[] = [];
-    for (const j of batch.jobs) {
-      if (j.status !== "succeeded") continue;
-      if (j.transferred_to_photo_id) continue;
-      if (!j.suggested || j.suggested.length === 0) continue;
-      const top = j.suggested[0];
-      out.push({
-        jobId: j.id,
-        jobName: j.source_filename || j.id.slice(0, 8),
-        collageId: top.collage_id,
-        ownerId: top.owner_id,
-      });
-    }
-    return out;
-  }, [batch.jobs]);
+  const candidates = useMemo(
+    () =>
+      batch.jobs
+        .filter((j) => j.status === "succeeded" && !j.transferred_to_photo_id && j.suggested?.length)
+        .map((j) => ({
+          jobId: j.id,
+          jobName: j.source_filename || j.id.slice(0, 8),
+          collageId: j.suggested[0].collage_id,
+          ownerId: j.suggested[0].owner_id,
+        })),
+    [batch.jobs],
+  );
 
-  const [picked, setPicked] = useState<Set<string>>(() => new Set(candidates.map((c) => c.jobId)));
+  const [picked, setPicked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+
+  // Reset picks when the candidate list changes (poll tick can add new
+  // succeeded jobs).
+  useEffect(() => {
+    setPicked(new Set(candidates.map((c) => c.jobId)));
+  }, [candidates]);
 
   if (candidates.length === 0) return null;
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -14,7 +15,7 @@ from .studio.storage import ensure_bucket as ensure_studio_bucket
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_pool()
-    ensure_studio_bucket()
+    await asyncio.to_thread(ensure_studio_bucket)
     try:
         yield
     finally:

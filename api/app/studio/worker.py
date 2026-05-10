@@ -14,30 +14,24 @@ import os
 import shutil
 import signal
 import tempfile
-import uuid as uuid_lib
-from datetime import datetime
 from pathlib import Path
-from typing import Any
 from uuid import UUID
 
 import asyncpg
 
 from studio_core import build_prompt, run_codex
-from studio_core.codex_runner import CodexError
+from studio_core.codex_runner import GENERATED_DIR, CodexError
+from studio_core.options import OptionKey
 
 from ..config import settings
 from ..db import close_pool, init_pool, pool
 from .article_match_db import find_matches
-from .storage import (
-    fetch_to,
-    put_bytes,
-    studio_bucket,
-)
+from .storage import fetch_to, put_bytes, studio_bucket
 
 logger = logging.getLogger("studio.worker")
 
 POLL_INTERVAL_SECONDS = 2.0
-LOG_TAIL_FLUSH_SECONDS = 1.0
+LOG_TAIL_FLUSH_SECONDS = 3.0
 SUCCESSES_BEFORE_GROW = 50
 RATE_LIMIT_BACKOFF_SECONDS = 30
 
@@ -171,105 +165,113 @@ async def succeed_job(
 # ---------------------------------------------------------------------------
 
 
-async def _resolve_asset_key(asset_id: UUID, *, table: str) -> str | None:
-    row = await pool().fetchrow(
-        f"SELECT s3_key FROM {table} WHERE id = $1 AND deleted_at IS NULL",
-        asset_id,
+_ASSET_TABLES = {"background": "studio_backgrounds", "watermark": "studio_watermarks"}
+
+
+async def _resolve_asset_keys(
+    background_id: UUID | None, watermark_id: UUID | None
+) -> tuple[str | None, str | None]:
+    """Single round-trip lookup for (bg_key, wm_key)."""
+    rows = await pool().fetch(
+        """
+        SELECT id, s3_key FROM studio_backgrounds
+         WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL
+        UNION ALL
+        SELECT id, s3_key FROM studio_watermarks
+         WHERE id = ANY($2::uuid[]) AND deleted_at IS NULL
+        """,
+        [background_id] if background_id else [],
+        [watermark_id] if watermark_id else [],
     )
-    return row["s3_key"] if row else None
-
-
-def _ext_from_key(key: str) -> str:
-    s = key.lower()
-    for ext in (".jpg", ".jpeg", ".png", ".webp", ".heic"):
-        if s.endswith(ext):
-            return ext
-    return ".jpg"
+    by_id = {r["id"]: r["s3_key"] for r in rows}
+    return (
+        by_id.get(background_id) if background_id else None,
+        by_id.get(watermark_id) if watermark_id else None,
+    )
 
 
 async def run_one_job(job: dict, work_dir: Path, ad_pool: AdaptivePool) -> bool:
-    """Run a single job. Returns True on success, False on failure.
-
-    Updates DB state on entry/exit.
-    """
+    """Run a single job. Returns True on success, False on failure."""
     job_id: UUID = job["id"]
     options = job["options_json"] or {}
     if isinstance(options, str):
         options = json.loads(options)
-    custom_prompt = job["custom_prompt"]
     background_id = job["background_id"]
     watermark_id = job["watermark_id"]
 
-    # Stage source + optional bg + wm into a fresh tmp dir
+    has_bg = bool(options.get(OptionKey.REPLACE_BG.value)) and background_id is not None
+    has_wm = bool(options.get(OptionKey.ADD_WATERMARK.value)) and watermark_id is not None
+
     job_dir = work_dir / str(job_id)
     job_dir.mkdir(parents=True, exist_ok=True)
+    sess_dir_to_clean: Path | None = None
     try:
-        src_path = job_dir / f"source{_ext_from_key(job['source_s3_key'])}"
+        bg_key, wm_key = await _resolve_asset_keys(
+            background_id if has_bg else None,
+            watermark_id if has_wm else None,
+        )
+        if has_bg and bg_key is None:
+            raise CodexError("background asset deleted before job ran")
+        if has_wm and wm_key is None:
+            raise CodexError("watermark asset deleted before job ran")
+
+        src_path = job_dir / f"source{Path(job['source_s3_key']).suffix}"
         src_bucket = (
             settings.minio_bucket
             if job["source_kind"] == "collage_photo"
             else studio_bucket()
         )
-        await asyncio.to_thread(
-            fetch_to, job["source_s3_key"], src_path, bucket=src_bucket
-        )
+
+        downloads = [
+            asyncio.to_thread(fetch_to, job["source_s3_key"], src_path, bucket=src_bucket),
+        ]
+        bg_path = wm_path = None
+        if has_bg:
+            bg_path = job_dir / f"background{Path(bg_key).suffix}"
+            downloads.append(asyncio.to_thread(fetch_to, bg_key, bg_path))
+        if has_wm:
+            wm_path = job_dir / f"watermark{Path(wm_key).suffix}"
+            downloads.append(asyncio.to_thread(fetch_to, wm_key, wm_path))
+        await asyncio.gather(*downloads)
 
         refs: list[Path] = [src_path]
-        has_bg = bool(options.get("replace_bg")) and background_id is not None
-        has_wm = bool(options.get("add_watermark")) and watermark_id is not None
-
-        if has_bg:
-            bg_key = await _resolve_asset_key(background_id, table="studio_backgrounds")
-            if bg_key is None:
-                raise CodexError("background asset deleted before job ran")
-            bg_path = job_dir / f"background{_ext_from_key(bg_key)}"
-            await asyncio.to_thread(fetch_to, bg_key, bg_path)
-            refs.append(bg_path)
-        if has_wm:
-            wm_key = await _resolve_asset_key(watermark_id, table="studio_watermarks")
-            if wm_key is None:
-                raise CodexError("watermark asset deleted before job ran")
-            wm_path = job_dir / f"watermark{_ext_from_key(wm_key)}"
-            await asyncio.to_thread(fetch_to, wm_key, wm_path)
-            refs.append(wm_path)
+        if bg_path: refs.append(bg_path)
+        if wm_path: refs.append(wm_path)
 
         prompt = build_prompt(
             options,
             has_background=has_bg,
             has_watermark=has_wm,
-            custom_prompt=custom_prompt,
+            custom_prompt=job["custom_prompt"],
         )
 
-        last_log = {"text": "", "ts": 0.0}
+        last_flush = {"text": "", "ts": 0.0}
 
         async def progress(tail: str) -> None:
             now = asyncio.get_event_loop().time()
-            if now - last_log["ts"] < LOG_TAIL_FLUSH_SECONDS:
-                return
-            last_log["text"] = tail
-            last_log["ts"] = now
+            if tail == last_flush["text"]: return  # no-op: same content
+            if now - last_flush["ts"] < LOG_TAIL_FLUSH_SECONDS: return
+            last_flush["text"] = tail
+            last_flush["ts"] = now
             try:
                 await pool().execute(
                     "UPDATE studio_jobs SET log_tail = $2 WHERE id = $1",
-                    job_id,
-                    tail[:8000],
+                    job_id, tail[:8000],
                 )
             except Exception:
                 logger.exception("failed to flush log tail for job %s", job_id)
 
         result = await run_codex(
-            prompt,
-            refs,
+            prompt, refs,
             log_callback=progress,
             timeout_seconds=settings.studio_codex_timeout_seconds,
         )
+        sess_dir_to_clean = GENERATED_DIR / result.session_id
 
-        # Upload result
         result_bytes = result.image_path.read_bytes()
         result_key = f"results/{job['batch_id']}/{job_id}.png"
         await asyncio.to_thread(put_bytes, result_key, result_bytes, "image/png")
 
-        # Article-match for transfer suggestions
         suggestions: list[dict] = []
         if job["source_filename"]:
             async with pool().acquire() as conn:
@@ -298,10 +300,11 @@ async def run_one_job(job: dict, work_dir: Path, ad_pool: AdaptivePool) -> bool:
         await fail_job(job_id, repr(e))
         return False
     finally:
-        try:
-            shutil.rmtree(job_dir, ignore_errors=True)
-        except Exception:
-            pass
+        shutil.rmtree(job_dir, ignore_errors=True)
+        # codex leaves the generated PNG in ~/.codex/generated_images/<sess>/;
+        # without cleanup that dir grows unbounded.
+        if sess_dir_to_clean is not None:
+            shutil.rmtree(sess_dir_to_clean, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------

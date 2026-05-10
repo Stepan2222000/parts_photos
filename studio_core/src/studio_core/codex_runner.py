@@ -60,23 +60,11 @@ def _detect_codex_binary() -> str:
 
 
 def _resolve_output(session_id: str) -> Path | None:
-    """Find the latest ig_*.png inside ~/.codex/generated_images/<session_id>/.
-
-    Strict: only this session's directory is consulted. Scanning the parent
-    `generated_images/` for "any new file" is unsafe — it picks up orphan
-    images from concurrent or previous sessions and silently substitutes
-    them as the job's result.
-    """
     sess_dir = GENERATED_DIR / session_id
     if not sess_dir.is_dir():
         return None
-    candidates = sorted(
-        (p for p in sess_dir.iterdir() if p.is_file() and p.suffix.lower() == ".png"),
-        key=lambda p: p.stat().st_mtime,
-    )
-    if not candidates:
-        return None
-    return candidates[-1]
+    pngs = [p for p in sess_dir.iterdir() if p.is_file() and p.suffix.lower() == ".png"]
+    return max(pngs, key=lambda p: p.stat().st_mtime) if pngs else None
 
 
 async def run_codex(
@@ -127,6 +115,7 @@ async def run_codex(
     tokens_used: int | None = None
     rate_limited = False
     capture_tokens = False
+    rc: int | None = None
 
     try:
         async with asyncio.timeout(timeout_seconds):
@@ -200,14 +189,3 @@ async def run_codex(
     )
 
 
-def run_codex_sync(
-    prompt: str,
-    refs: list[Path],
-    *,
-    timeout_seconds: float = 15 * 60,
-    cwd: Path | None = None,
-) -> CodexResult:
-    """Synchronous helper for the CLI."""
-    return asyncio.run(
-        run_codex(prompt, refs, timeout_seconds=timeout_seconds, cwd=cwd)
-    )

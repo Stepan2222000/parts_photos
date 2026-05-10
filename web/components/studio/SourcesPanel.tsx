@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { Group } from "@/lib/types";
 import CollagePickerDialog from "./CollagePickerDialog";
@@ -193,11 +193,11 @@ export default function SourcesPanel({
 
 function FileThumb({ file }: { file: File }) {
   const [src, setSrc] = useState<string | null>(null);
-  if (src === null) {
-    const r = new FileReader();
-    r.onload = (e) => setSrc(String(e.target?.result || ""));
-    r.readAsDataURL(file);
-  }
+  useEffect(() => {
+    const url = URL.createObjectURL(file);
+    setSrc(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
   return src ? <img src={src} alt="" /> : <div className={s.thumbStub} />;
 }
 
@@ -230,12 +230,16 @@ function CollageInlineSearch({
     }
   }
 
-  if (value && resolved?.id !== value) {
-    api.collages
-      .get(value)
-      .then((c) => setResolved({ id: c.id, owner_id: c.owner_id }))
-      .catch(() => setResolved({ id: value, owner_id: value }));
-  }
+  // Resolve the picked collage's display name once per `value` change.
+  useEffect(() => {
+    if (!value) { setResolved(null); return; }
+    if (resolved?.id === value) return;
+    let alive = true;
+    api.collages.get(value)
+      .then((c) => alive && setResolved({ id: c.id, owner_id: c.owner_id }))
+      .catch(() => alive && setResolved({ id: value, owner_id: value }));
+    return () => { alive = false; };
+  }, [value, resolved?.id]);
 
   if (value && resolved?.id === value) {
     return (

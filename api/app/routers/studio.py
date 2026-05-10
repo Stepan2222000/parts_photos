@@ -1,23 +1,18 @@
 from __future__ import annotations
 
 import json
-import logging
-from io import BytesIO
 from typing import Annotated
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from PIL import Image
-from pydantic import ValidationError
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from studio_core.options import OPTION_KEYS, coerce_options
+from studio_core.options import OptionKey, coerce_options
 
 from ..config import settings
 from ..db import pool
 from ..images import InvalidImage, _open_pil_from_bytes, ensure_codex_compatible
 from ..minio_client import public_url
 from ..models import Photo
-from ..studio.article_match_db import find_matches
 from ..studio.schemas import (
     BulkTransferRequest,
     StudioAsset,
@@ -28,49 +23,31 @@ from ..studio.schemas import (
     TransferRequest,
 )
 from ..studio.storage import (
-    fetch_to,
+    fetch_to,  # noqa: F401  — re-exported for the worker
     move_studio_to_photos,
     put_bytes,
-    remove_object,
     studio_url,
 )
 
-logger = logging.getLogger("studio.api")
 router = APIRouter(prefix="/studio", tags=["studio"])
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-ASSET_KIND_BG = "backgrounds"
-ASSET_KIND_WM = "watermarks"
-
-
-def _decode_asset(
-    raw: bytes, source_mime: str, *, prefer_png: bool
+def _decode_for_codex(
+    raw: bytes, source_mime: str, filename: str, *, prefer_png: bool
 ) -> tuple[bytes, str, str, int, int]:
-    """Normalize an uploaded asset to a codex-compatible format.
-
-    Returns (data, content_type, ext, width, height). HEIC and other
-    unsupported formats are converted (JPEG by default, PNG for watermarks
-    so alpha is preserved). JPEG/PNG/WebP pass through.
-    """
+    """raw → (data, mime, ext, w, h), HTTP-400 on decode failure."""
     try:
         data, mime, ext = ensure_codex_compatible(
             raw, source_mime, prefer_png=prefer_png
         )
-    except InvalidImage as e:
-        raise HTTPException(400, str(e))
-    try:
         with _open_pil_from_bytes(data) as img:
             w, h = img.size
     except InvalidImage as e:
-        raise HTTPException(400, str(e))
+        raise HTTPException(400, f"{filename}: {e}")
     return data, mime, ext, w, h
 
 
-def _row_to_asset(r: dict, kind: str) -> StudioAsset:
+def _row_to_asset(r: dict) -> StudioAsset:
     return StudioAsset(
         id=r["id"],
         name=r["name"],
@@ -105,26 +82,25 @@ def _row_to_batch(r: dict) -> StudioBatch:
 
 
 def _row_to_job(r: dict, transferred_photo_s3_key: str | None = None) -> StudioJob:
-    suggested = []
     sj = r["suggested_collages_json"]
-    if sj:
-        if isinstance(sj, str):
-            sj = json.loads(sj)
-        for s in sj:
-            suggested.append(SuggestedTransfer(**s))
-    src_url = (
-        public_url(r["source_s3_key"])
-        if r["source_kind"] == "collage_photo"
-        else studio_url(r["source_s3_key"])
-    )
-    # After a transfer, the file lives in the photos bucket and the studio
-    # bucket no longer holds it. Build the result URL from the linked photo.
+    if isinstance(sj, str):
+        sj = json.loads(sj)
+    suggested = [SuggestedTransfer(**s) for s in (sj or [])]
+
+    if r["source_kind"] == "collage_photo":
+        src_url = public_url(r["source_s3_key"])
+    else:
+        src_url = studio_url(r["source_s3_key"])
+
+    # After transfer, the file lives in the photos bucket; build URL from the
+    # linked photo. Otherwise from studio bucket while result still exists.
     if r["transferred_to_photo_id"] and transferred_photo_s3_key:
         result_url = public_url(transferred_photo_s3_key)
     elif r["result_s3_key"]:
         result_url = studio_url(r["result_s3_key"])
     else:
         result_url = None
+
     return StudioJob(
         id=r["id"],
         batch_id=r["batch_id"],
@@ -136,7 +112,7 @@ def _row_to_job(r: dict, transferred_photo_s3_key: str | None = None) -> StudioJ
         status=r["status"],
         result_s3_key=r["result_s3_key"],
         result_url=result_url,
-        log_tail=r["log_tail"],
+        log_tail=r.get("log_tail"),
         error=r["error"],
         tokens_used=r["tokens_used"],
         elapsed_seconds=r["elapsed_seconds"],
@@ -146,17 +122,6 @@ def _row_to_job(r: dict, transferred_photo_s3_key: str | None = None) -> StudioJ
         suggested=suggested,
         created_at=r["created_at"],
     )
-
-
-async def _job_with_transferred_url(row: dict, conn) -> StudioJob:
-    """Build StudioJob, looking up the linked photo's s3_key if transferred."""
-    transferred_key = None
-    if row["transferred_to_photo_id"]:
-        transferred_key = await conn.fetchval(
-            "SELECT s3_key FROM photos WHERE id = $1",
-            row["transferred_to_photo_id"],
-        )
-    return _row_to_job(row, transferred_key)
 
 
 # ---------------------------------------------------------------------------
@@ -212,9 +177,9 @@ async def _upload_asset(file: UploadFile, *, table: str, prefix: str) -> StudioA
             f"File too large: {len(raw)} bytes, max {settings.studio_max_source_bytes}",
         )
     # Watermarks keep alpha → PNG. Backgrounds are full-frame textures → JPEG.
-    prefer_png = prefix == "watermarks"
-    data, content_type, ext, w, h = _decode_asset(
-        raw, file.content_type or "", prefer_png=prefer_png
+    data, content_type, ext, w, h = _decode_for_codex(
+        raw, file.content_type or "", file.filename or "asset",
+        prefer_png=prefix == "watermarks",
     )
     asset_id = uuid4()
     s3_key = f"{prefix}/{asset_id}.{ext}"
@@ -232,7 +197,7 @@ async def _upload_asset(file: UploadFile, *, table: str, prefix: str) -> StudioA
         h,
         len(data),
     )
-    return _row_to_asset(dict(row), prefix)
+    return _row_to_asset(dict(row))
 
 
 async def _soft_delete_asset(asset_id: UUID, *, table: str) -> None:
@@ -294,8 +259,6 @@ async def create_batch(
     if not photo_ids and not file_list:
         raise HTTPException(400, "Batch needs at least one source (file or collage photo)")
 
-    # decode + normalize uploads. HEIC and other non-(jpeg/png/webp) inputs
-    # are converted to JPEG so codex doesn't 400 on us. No resize.
     upload_payloads: list[tuple[str, str, str, bytes]] = []  # (filename, mime, ext, bytes)
     for f in file_list:
         raw = await f.read()
@@ -307,12 +270,9 @@ async def create_batch(
                 f"{f.filename}: {len(raw)} bytes exceeds max "
                 f"{settings.studio_max_source_bytes} (gpt-image-2 limit)",
             )
-        try:
-            data, mime, ext = ensure_codex_compatible(
-                raw, f.content_type or "", prefer_png=False
-            )
-        except InvalidImage as e:
-            raise HTTPException(400, f"{f.filename}: {e}")
+        data, mime, ext, _w, _h = _decode_for_codex(
+            raw, f.content_type or "", f.filename, prefer_png=False
+        )
         upload_payloads.append((f.filename, mime, ext, data))
 
     # validate referenced assets / collage exist
@@ -453,12 +413,13 @@ async def get_batch(batch_id: UUID) -> StudioBatchDetail:
         )
         if head is None:
             raise HTTPException(404, "Batch not found")
-        # Single-query join: fetch transferred photo s3_keys alongside jobs so
-        # the result_url renders correctly for transferred jobs.
+        # log_tail is intentionally omitted: it can be ~8KB per job and the
+        # batch detail is polled every 2s by the UI. Use GET /jobs/{id} when
+        # the user opens the per-job drawer to see logs.
         job_rows = await conn.fetch(
             """
             SELECT j.id, j.batch_id, j.source_kind, j.source_filename, j.source_s3_key,
-                   j.source_photo_id, j.status, j.result_s3_key, j.log_tail, j.error,
+                   j.source_photo_id, j.status, j.result_s3_key, j.error,
                    j.tokens_used, j.elapsed_seconds, j.started_at, j.finished_at,
                    j.transferred_to_photo_id, j.suggested_collages_json, j.created_at,
                    p.s3_key AS transferred_photo_s3_key
@@ -527,18 +488,17 @@ async def transfer_job(job_id: UUID, body: TransferRequest) -> Photo:
 
 @router.post("/batches/{batch_id}/transfer-suggested", response_model=list[Photo])
 async def transfer_suggested(batch_id: UUID, body: BulkTransferRequest) -> list[Photo]:
-    out: list[Photo] = []
-    for entry in body.transfers:
-        # cheap validation that the job belongs to this batch
-        ok = await pool().fetchval(
-            "SELECT 1 FROM studio_jobs WHERE id = $1 AND batch_id = $2",
-            entry.job_id,
-            batch_id,
-        )
-        if not ok:
-            raise HTTPException(404, f"Job {entry.job_id} not in batch {batch_id}")
-        out.append(await _do_transfer(entry.job_id, entry.collage_id))
-    return out
+    job_ids = [e.job_id for e in body.transfers]
+    valid_rows = await pool().fetch(
+        "SELECT id FROM studio_jobs WHERE batch_id = $1 AND id = ANY($2::uuid[])",
+        batch_id,
+        job_ids,
+    )
+    valid_ids = {r["id"] for r in valid_rows}
+    missing = [str(j) for j in job_ids if j not in valid_ids]
+    if missing:
+        raise HTTPException(404, f"Jobs not in batch {batch_id}: {', '.join(missing)}")
+    return [await _do_transfer(e.job_id, e.collage_id) for e in body.transfers]
 
 
 async def _do_transfer(job_id: UUID, collage_id: UUID) -> Photo:
@@ -558,10 +518,9 @@ async def _do_transfer(job_id: UUID, collage_id: UUID) -> Photo:
             )
             if job is None:
                 raise HTTPException(404, "Job not found")
+            # Check transferred BEFORE result_s3_key — after transfer
+            # result_s3_key is NULL, which would mask the real reason.
             if job["transferred_to_photo_id"] is not None:
-                # Check transferred BEFORE result_s3_key — once transferred,
-                # result_s3_key is cleared, so the absent-result check would
-                # mask the actual reason.
                 raise HTTPException(409, "Job already transferred")
             if job["status"] != "succeeded":
                 raise HTTPException(400, f"Job not succeeded ({job['status']})")
@@ -574,19 +533,10 @@ async def _do_transfer(job_id: UUID, collage_id: UUID) -> Photo:
             if collage is None:
                 raise HTTPException(404, "Collage not found")
 
-            # Move the file from the Studio bucket into the photos bucket.
-            # photos.s3_key now points to the canonical location used by the
-            # collage page URL builder. Studio just keeps a foreign-key
-            # reference (transferred_to_photo_id) and clears its own
-            # result_s3_key so the orphan-bucket path is never read again.
             photo_id = uuid4()
             new_key = (
                 f"groups/{collage['group_id']}/collages/{collage_id}/{photo_id}.png"
             )
-
-            # MinIO copy is sync; do it before the photo row insert so we
-            # never have a row pointing at a missing object. If the copy
-            # fails, the TX rolls back and the studio job stays untransferred.
             try:
                 move_studio_to_photos(job["result_s3_key"], new_key)
             except Exception as e:

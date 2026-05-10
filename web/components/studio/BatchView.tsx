@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { api } from "@/lib/api";
 import type { StudioBatchDetail, StudioJob } from "@/lib/types";
 import CollagePickerDialog from "./CollagePickerDialog";
@@ -28,7 +28,6 @@ export default function BatchView({ batch, onBack, onTransferred }: Props) {
 
   const pct = batch.total > 0 ? Math.round((batch.done / batch.total) * 100) : 0;
   const activeJob = batch.jobs.find((j) => j.id === activeJobId) || null;
-  const succeededJobs = batch.jobs.filter((j) => j.status === "succeeded");
 
   return (
     <div>
@@ -74,10 +73,6 @@ export default function BatchView({ batch, onBack, onTransferred }: Props) {
             job={j}
             active={activeJobId === j.id}
             onSelect={() => setActiveJobId(j.id === activeJobId ? null : j.id)}
-            onTransfer={async (collageId) => {
-              await api.studio.transferJob(j.id, collageId);
-              await onTransferred();
-            }}
           />
         ))}
       </div>
@@ -93,43 +88,38 @@ export default function BatchView({ batch, onBack, onTransferred }: Props) {
   );
 }
 
+const STATUS_LABEL: Record<StudioJob["status"], string> = {
+  queued: "queued", running: "running", succeeded: "✓", failed: "failed",
+};
+
 function JobCard({
   job,
   active,
   onSelect,
-  onTransfer,
 }: {
   job: StudioJob;
   active: boolean;
   onSelect: () => void;
-  onTransfer: (collageId: string) => Promise<void>;
 }) {
-  const isDone = job.status === "succeeded";
   const isFailed = job.status === "failed";
-  const isRunning = job.status === "running";
   const cls = `${s.card} ${active ? s.cardActive : ""} ${isFailed ? s.cardFailed : ""}`;
 
   return (
     <div className={cls} onClick={onSelect}>
       <div className={s.cardImg}>
-        {isDone && job.result_url ? (
+        {job.status === "succeeded" && job.result_url ? (
           <img src={job.result_url} alt="" />
-        ) : isRunning ? (
+        ) : job.status === "running" ? (
           <div className={s.spinner}>
             <div className={s.spinnerDot} />
             <div className={s.spinnerDot} />
             <div className={s.spinnerDot} />
           </div>
-        ) : isFailed ? (
-          <img src={job.source_url} alt="" className={s.dim} />
         ) : (
           <img src={job.source_url} alt="" className={s.dim} />
         )}
         <span className={`${s.status} ${s["st_" + job.status]}`}>
-          {job.status === "queued" && "queued"}
-          {job.status === "running" && "running"}
-          {job.status === "succeeded" && "✓"}
-          {job.status === "failed" && "failed"}
+          {STATUS_LABEL[job.status]}
         </span>
         {job.transferred_to_photo_id && (
           <span className={s.transferred}>в коллаже</span>
@@ -139,7 +129,7 @@ function JobCard({
         <span className={s.cardName}>
           {job.source_filename || job.source_kind}
         </span>
-        {isDone && job.elapsed_seconds && (
+        {job.elapsed_seconds != null && (
           <span className={s.cardElapsed}>{Math.round(job.elapsed_seconds)}s</span>
         )}
       </div>

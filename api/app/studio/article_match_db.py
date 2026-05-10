@@ -1,9 +1,12 @@
 """DB-backed article matching: filename stem → list of matching collages."""
 from __future__ import annotations
 
-import asyncpg  # noqa: F401  — kept for type-hint reference in callers
+from typing import TYPE_CHECKING
 
-from studio_core.article_match import normalize_filename_stem
+from studio_core.article_match import normalize_article, normalize_filename_stem
+
+if TYPE_CHECKING:
+    import asyncpg
 
 # Compares normalized stem against normalized owner_id and every normalized
 # article in the joined smart_ext.parts row. Both sides go through the same
@@ -31,7 +34,7 @@ LIMIT 10
 """
 
 
-async def find_matches(filename: str | None, conn: asyncpg.Connection) -> list[dict]:
+async def find_matches(filename: str | None, conn: "asyncpg.Connection") -> list[dict]:
     if not filename:
         return []
     norm = normalize_filename_stem(filename)
@@ -40,13 +43,8 @@ async def find_matches(filename: str | None, conn: asyncpg.Connection) -> list[d
     rows = await conn.fetch(_MATCH_QUERY, norm)
     out: list[dict] = []
     for r in rows:
-        articles = list(r["owner_articles"] or []) if "owner_articles" in r else []
-        # find which article actually matched
-        matched = r["owner_id"]
-        for a in articles:
-            if _normalize(a) == norm:
-                matched = a
-                break
+        articles = list(r["owner_articles"] or [])
+        matched = next((a for a in articles if normalize_article(a) == norm), r["owner_id"])
         out.append(
             {
                 "collage_id": str(r["collage_id"]),
@@ -57,9 +55,3 @@ async def find_matches(filename: str | None, conn: asyncpg.Connection) -> list[d
             }
         )
     return out
-
-
-def _normalize(s: str) -> str:
-    import re
-
-    return re.sub(r"[^a-z0-9]+", "", s.lower())
