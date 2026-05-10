@@ -92,3 +92,25 @@ def fetch_to(s3_key: str, dest: Path, *, bucket: str | None = None) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     use_bucket = bucket or studio_bucket()
     photos_client().fget_object(use_bucket, s3_key, str(dest))
+
+
+def move_studio_to_photos(src_key: str, dest_key: str) -> None:
+    """Copy an object from the Studio bucket to the photos bucket, then
+    delete the source. Used when transferring a generated result into a
+    collage — the file's storage of record becomes the photos bucket and
+    the studio_job just keeps a reference via transferred_to_photo_id.
+    """
+    from minio.commonconfig import CopySource
+
+    c = photos_client()
+    c.copy_object(
+        bucket_name=settings.minio_bucket,
+        object_name=dest_key,
+        source=CopySource(studio_bucket(), src_key),
+    )
+    try:
+        c.remove_object(studio_bucket(), src_key)
+    except Exception:
+        # Source removal is best-effort: copy already succeeded, the result
+        # is safe in the photos bucket. An orphan in studio bucket is OK.
+        pass

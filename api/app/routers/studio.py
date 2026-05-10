@@ -29,6 +29,7 @@ from ..studio.schemas import (
 )
 from ..studio.storage import (
     fetch_to,
+    move_studio_to_photos,
     put_bytes,
     remove_object,
     studio_url,
@@ -96,7 +97,7 @@ def _row_to_batch(r: dict) -> StudioBatch:
     )
 
 
-def _row_to_job(r: dict) -> StudioJob:
+def _row_to_job(r: dict, transferred_photo_s3_key: str | None = None) -> StudioJob:
     suggested = []
     sj = r["suggested_collages_json"]
     if sj:
@@ -109,7 +110,14 @@ def _row_to_job(r: dict) -> StudioJob:
         if r["source_kind"] == "collage_photo"
         else studio_url(r["source_s3_key"])
     )
-    result_url = studio_url(r["result_s3_key"]) if r["result_s3_key"] else None
+    # After a transfer, the file lives in the photos bucket and the studio
+    # bucket no longer holds it. Build the result URL from the linked photo.
+    if r["transferred_to_photo_id"] and transferred_photo_s3_key:
+        result_url = public_url(transferred_photo_s3_key)
+    elif r["result_s3_key"]:
+        result_url = studio_url(r["result_s3_key"])
+    else:
+        result_url = None
     return StudioJob(
         id=r["id"],
         batch_id=r["batch_id"],
@@ -131,6 +139,17 @@ def _row_to_job(r: dict) -> StudioJob:
         suggested=suggested,
         created_at=r["created_at"],
     )
+
+
+async def _job_with_transferred_url(row: dict, conn) -> StudioJob:
+    """Build StudioJob, looking up the linked photo's s3_key if transferred."""
+    transferred_key = None
+    if row["transferred_to_photo_id"]:
+        transferred_key = await conn.fetchval(
+            "SELECT s3_key FROM photos WHERE id = $1",
+            row["transferred_to_photo_id"],
+        )
+    return _row_to_job(row, transferred_key)
 
 
 # ---------------------------------------------------------------------------
@@ -422,34 +441,40 @@ async def list_batches(limit: int = 50, offset: int = 0) -> list[StudioBatch]:
 
 @router.get("/batches/{batch_id}", response_model=StudioBatchDetail)
 async def get_batch(batch_id: UUID) -> StudioBatchDetail:
-    head = await pool().fetchrow(
-        """
-        SELECT id, name, options_json, custom_prompt, background_id, watermark_id,
-               target_collage_id, status, total, done, failed, created_at, finished_at
-        FROM studio_batches WHERE id = $1
-        """,
-        batch_id,
-    )
-    if head is None:
-        raise HTTPException(404, "Batch not found")
-    job_rows = await pool().fetch(
-        """
-        SELECT id, batch_id, source_kind, source_filename, source_s3_key,
-               source_photo_id, status, result_s3_key, log_tail, error,
-               tokens_used, elapsed_seconds, started_at, finished_at,
-               transferred_to_photo_id, suggested_collages_json, created_at
-        FROM studio_jobs
-        WHERE batch_id = $1
-        ORDER BY created_at ASC
-        """,
-        batch_id,
-    )
-    head_d = dict(head)
-    base = _row_to_batch(head_d)
-    return StudioBatchDetail(
-        **base.model_dump(),
-        jobs=[_row_to_job(dict(r)) for r in job_rows],
-    )
+    async with pool().acquire() as conn:
+        head = await conn.fetchrow(
+            """
+            SELECT id, name, options_json, custom_prompt, background_id, watermark_id,
+                   target_collage_id, status, total, done, failed, created_at, finished_at
+            FROM studio_batches WHERE id = $1
+            """,
+            batch_id,
+        )
+        if head is None:
+            raise HTTPException(404, "Batch not found")
+        # Single-query join: fetch transferred photo s3_keys alongside jobs so
+        # the result_url renders correctly for transferred jobs.
+        job_rows = await conn.fetch(
+            """
+            SELECT j.id, j.batch_id, j.source_kind, j.source_filename, j.source_s3_key,
+                   j.source_photo_id, j.status, j.result_s3_key, j.log_tail, j.error,
+                   j.tokens_used, j.elapsed_seconds, j.started_at, j.finished_at,
+                   j.transferred_to_photo_id, j.suggested_collages_json, j.created_at,
+                   p.s3_key AS transferred_photo_s3_key
+            FROM studio_jobs j
+            LEFT JOIN photos p ON p.id = j.transferred_to_photo_id
+            WHERE j.batch_id = $1
+            ORDER BY j.created_at ASC
+            """,
+            batch_id,
+        )
+        base = _row_to_batch(dict(head))
+        jobs: list[StudioJob] = []
+        for r in job_rows:
+            d = dict(r)
+            transferred_key = d.pop("transferred_photo_s3_key", None)
+            jobs.append(_row_to_job(d, transferred_key))
+        return StudioBatchDetail(**base.model_dump(), jobs=jobs)
 
 
 @router.delete("/batches/{batch_id}", status_code=204)
@@ -469,19 +494,25 @@ async def delete_batch(batch_id: UUID) -> None:
 
 @router.get("/jobs/{job_id}", response_model=StudioJob)
 async def get_job(job_id: UUID) -> StudioJob:
-    row = await pool().fetchrow(
-        """
-        SELECT id, batch_id, source_kind, source_filename, source_s3_key,
-               source_photo_id, status, result_s3_key, log_tail, error,
-               tokens_used, elapsed_seconds, started_at, finished_at,
-               transferred_to_photo_id, suggested_collages_json, created_at
-        FROM studio_jobs WHERE id = $1
-        """,
-        job_id,
-    )
-    if row is None:
-        raise HTTPException(404, "Job not found")
-    return _row_to_job(dict(row))
+    async with pool().acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT j.id, j.batch_id, j.source_kind, j.source_filename, j.source_s3_key,
+                   j.source_photo_id, j.status, j.result_s3_key, j.log_tail, j.error,
+                   j.tokens_used, j.elapsed_seconds, j.started_at, j.finished_at,
+                   j.transferred_to_photo_id, j.suggested_collages_json, j.created_at,
+                   p.s3_key AS transferred_photo_s3_key
+            FROM studio_jobs j
+            LEFT JOIN photos p ON p.id = j.transferred_to_photo_id
+            WHERE j.id = $1
+            """,
+            job_id,
+        )
+        if row is None:
+            raise HTTPException(404, "Job not found")
+        d = dict(row)
+        transferred_key = d.pop("transferred_photo_s3_key", None)
+        return _row_to_job(d, transferred_key)
 
 
 @router.post("/jobs/{job_id}/transfer", response_model=Photo, status_code=201)
@@ -533,17 +564,30 @@ async def _do_transfer(job_id: UUID, collage_id: UUID) -> Photo:
             if job["transferred_to_photo_id"] is not None:
                 raise HTTPException(409, "Job already transferred")
 
-            collage_ok = await conn.fetchval(
-                "SELECT 1 FROM photo_collages WHERE id = $1", collage_id
+            collage = await conn.fetchrow(
+                "SELECT id, group_id FROM photo_collages WHERE id = $1", collage_id
             )
-            if not collage_ok:
+            if collage is None:
                 raise HTTPException(404, "Collage not found")
 
-            # Result lives in the studio bucket. We store the FULL key with a
-            # bucket prefix so the photos endpoint URL builder still works.
-            # The Studio bucket has its own public_base, so we keep the URL
-            # logic in this router.
+            # Move the file from the Studio bucket into the photos bucket.
+            # photos.s3_key now points to the canonical location used by the
+            # collage page URL builder. Studio just keeps a foreign-key
+            # reference (transferred_to_photo_id) and clears its own
+            # result_s3_key so the orphan-bucket path is never read again.
             photo_id = uuid4()
+            new_key = (
+                f"groups/{collage['group_id']}/collages/{collage_id}/{photo_id}.png"
+            )
+
+            # MinIO copy is sync; do it before the photo row insert so we
+            # never have a row pointing at a missing object. If the copy
+            # fails, the TX rolls back and the studio job stays untransferred.
+            try:
+                move_studio_to_photos(job["result_s3_key"], new_key)
+            except Exception as e:
+                raise HTTPException(500, f"Failed to move object: {e}") from e
+
             row = await conn.fetchrow(
                 """
                 INSERT INTO photos
@@ -560,16 +604,20 @@ async def _do_transfer(job_id: UUID, collage_id: UUID) -> Photo:
                 """,
                 photo_id,
                 collage_id,
-                job["result_s3_key"],
+                new_key,
                 job["result_size_bytes"] or 0,
                 job_id,
             )
             await conn.execute(
-                "UPDATE studio_jobs SET transferred_to_photo_id = $1 WHERE id = $2",
+                """
+                UPDATE studio_jobs
+                   SET transferred_to_photo_id = $1,
+                       result_s3_key = NULL
+                 WHERE id = $2
+                """,
                 photo_id,
                 job_id,
             )
     photo_dict = dict(row)
-    # photos with source='studio' resolve through the studio bucket
-    photo_dict["url"] = studio_url(photo_dict["s3_key"])
+    photo_dict["url"] = public_url(photo_dict["s3_key"])
     return Photo(**photo_dict)

@@ -71,6 +71,22 @@
   padding: 0 8px 12px;
   overflow-y: auto;
 }
+.sugBlock {
+  padding: 0 8px 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+.sugLabel {
+  font-size: 10px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 8px 8px 6px;
+}
+.sugItem {
+  background: var(--brand-coral-soft);
+}
+.collagePreview { display: flex; flex-direction: column; gap: 12px; }
 .empty {
   padding: 14px 12px;
   color: var(--text-muted);

@@ -200,6 +200,44 @@
   line-height: 1;
 }
 
+.transferBar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--sp-md);
+}
+.transferBtn {
+  background: var(--brand-coral);
+  color: #fff;
+  border: 0;
+  padding: 12px 22px;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.transferBtn:hover { background: var(--brand-coral-hover); }
+.transferBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.transferredBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--brand-coral-soft);
+  border: 1px solid var(--brand-coral);
+  color: var(--text-strong);
+  padding: 10px 18px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 500;
+}
+.transferredLink {
+  color: var(--brand-coral);
+  text-decoration: none;
+  font-weight: 500;
+}
+.transferredLink:hover { text-decoration: underline; }
+
 .compare {
   display: grid;
   grid-template-columns: 1fr 1fr;

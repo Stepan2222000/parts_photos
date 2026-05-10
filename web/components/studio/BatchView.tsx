@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import type { StudioBatchDetail, StudioJob } from "@/lib/types";
+import CollagePickerDialog from "./CollagePickerDialog";
 import TransferSuggestions from "./TransferSuggestions";
 import s from "./BatchView.module.css";
 
@@ -155,6 +156,25 @@ function JobDrawer({
   onClose: () => void;
   onTransferred: () => Promise<void> | void;
 }) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const transferred = !!job.transferred_to_photo_id;
+  const canTransfer = job.status === "succeeded" && !transferred;
+
+  async function transferTo(collageId: string) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await api.studio.transferJob(job.id, collageId);
+      setPickerOpen(false);
+      await onTransferred();
+    } catch (e) {
+      alert(`Не удалось перенести: ${e}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className={s.drawerBack} onClick={onClose}>
       <div className={s.drawer} onClick={(e) => e.stopPropagation()}>
@@ -164,6 +184,33 @@ function JobDrawer({
           </h3>
           <button className={s.drawerClose} onClick={onClose}>×</button>
         </div>
+
+        {(canTransfer || transferred) && (
+          <div className={s.transferBar}>
+            {transferred ? (
+              <div className={s.transferredBadge}>
+                <span>✓ Перенесено в коллаж</span>
+                {job.suggested && job.suggested[0] && (
+                  <a
+                    className={s.transferredLink}
+                    href={`/collages/${job.transferred_to_photo_id ? job.suggested[0].collage_id : ""}`}
+                  >
+                    Открыть коллаж →
+                  </a>
+                )}
+              </div>
+            ) : (
+              <button
+                className={s.transferBtn}
+                onClick={() => setPickerOpen(true)}
+                disabled={busy}
+              >
+                {busy ? "Переношу…" : "Перенести в коллаж…"}
+              </button>
+            )}
+          </div>
+        )}
+
         <div className={s.compare}>
           <div className={s.compareSide}>
             <div className={s.compareLabel}>Before</div>
@@ -189,29 +236,14 @@ function JobDrawer({
             <pre className={s.log}>{job.log_tail}</pre>
           </details>
         )}
-        {job.suggested && job.suggested.length > 0 && !job.transferred_to_photo_id && (
-          <div className={s.sugBlock}>
-            <div className={s.sugTitle}>Предложения по коллажам:</div>
-            <ul className={s.sugList}>
-              {job.suggested.map((s2) => (
-                <li key={s2.collage_id} className={s.sugRow}>
-                  <span>
-                    <strong>{s2.owner_id}</strong>
-                    {s2.owner_name && <span> — {s2.owner_name}</span>}
-                  </span>
-                  <button
-                    className={s.sugBtn}
-                    onClick={async () => {
-                      await api.studio.transferJob(job.id, s2.collage_id);
-                      await onTransferred();
-                    }}
-                  >
-                    Перенести →
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
+        {pickerOpen && (
+          <CollagePickerDialog
+            mode="collage-only"
+            title="Перенести результат в коллаж"
+            suggestions={job.suggested}
+            onClose={() => setPickerOpen(false)}
+            onPickCollage={(c) => transferTo(c.id)}
+          />
         )}
       </div>
     </div>

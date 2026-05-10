@@ -2,16 +2,42 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import type { Collage, CollageDetail, Photo } from "@/lib/types";
+import type {
+  Collage,
+  CollageDetail,
+  Photo,
+  SuggestedTransfer,
+} from "@/lib/types";
 import type { CollagePickedPhoto } from "./SourcesPanel";
 import s from "./CollagePickerDialog.module.css";
 
-interface Props {
+type Mode = "photos" | "collage-only";
+
+interface BaseProps {
   onClose: () => void;
+  /** Pre-suggested matches (e.g. by article match) shown above the search list. */
+  suggestions?: SuggestedTransfer[];
+  /** Title override; default depends on mode. */
+  title?: string;
+}
+
+interface PhotosProps extends BaseProps {
+  mode?: "photos";
   onPick: (photos: CollagePickedPhoto[]) => void;
 }
 
-export default function CollagePickerDialog({ onClose, onPick }: Props) {
+interface CollageOnlyProps extends BaseProps {
+  mode: "collage-only";
+  onPickCollage: (collage: { id: string; owner_id: string; group_id: string }) => void;
+}
+
+type Props = PhotosProps | CollageOnlyProps;
+
+export default function CollagePickerDialog(props: Props) {
+  const { onClose } = props;
+  const mode: Mode = props.mode || "photos";
+  const suggestions = props.suggestions || [];
+
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Collage[]>([]);
   const [active, setActive] = useState<CollageDetail | null>(null);
@@ -62,8 +88,8 @@ export default function CollagePickerDialog({ onClose, onPick }: Props) {
     });
   }
 
-  function confirm() {
-    if (!active) return;
+  function confirmPhotos() {
+    if (mode !== "photos" || !active) return;
     const out: CollagePickedPhoto[] = [];
     for (const p of active.photos) {
       if (picked.has(p.id)) {
@@ -75,14 +101,26 @@ export default function CollagePickerDialog({ onClose, onPick }: Props) {
         });
       }
     }
-    if (out.length > 0) onPick(out);
+    if (out.length > 0) (props as PhotosProps).onPick(out);
   }
+
+  function confirmCollage() {
+    if (mode !== "collage-only" || !active) return;
+    (props as CollageOnlyProps).onPickCollage({
+      id: active.id,
+      owner_id: active.owner_id,
+      group_id: active.group_id,
+    });
+  }
+
+  const title =
+    props.title || (mode === "collage-only" ? "Выбор коллажа" : "Выбор фото из коллажей");
 
   return (
     <div className={s.backdrop} onClick={onClose}>
       <div className={s.modal} onClick={(e) => e.stopPropagation()}>
         <div className={s.head}>
-          <h2 className={s.title}>Выбор фото из коллажей</h2>
+          <h2 className={s.title}>{title}</h2>
           <button className={s.close} onClick={onClose}>×</button>
         </div>
         <div className={s.body}>
@@ -94,6 +132,28 @@ export default function CollagePickerDialog({ onClose, onPick }: Props) {
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
+            {suggestions.length > 0 && (
+              <div className={s.sugBlock}>
+                <div className={s.sugLabel}>Похоже на это:</div>
+                <ul className={s.list}>
+                  {suggestions.map((sug) => (
+                    <li
+                      key={sug.collage_id}
+                      className={`${s.item} ${s.sugItem} ${active?.id === sug.collage_id ? s.activeItem : ""}`}
+                      onClick={() => openCollage(sug.collage_id)}
+                    >
+                      <div className={s.itemThumb}>★</div>
+                      <div className={s.itemMain}>
+                        <span className={s.itemName}>{sug.owner_id}</span>
+                        {sug.owner_name && (
+                          <span className={s.itemGroup}>{sug.owner_name}</span>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <ul className={s.list}>
               {results.length === 0 && q.length >= 2 && (
                 <li className={s.empty}>Ничего не нашлось.</li>
@@ -125,10 +185,12 @@ export default function CollagePickerDialog({ onClose, onPick }: Props) {
           <div className={s.right}>
             {!active && (
               <div className={s.placeholder}>
-                Введи запрос слева и выбери коллаж.
+                {mode === "collage-only"
+                  ? "Найди коллаж и подтверди — туда уйдёт результат."
+                  : "Введи запрос слева и выбери коллаж."}
               </div>
             )}
-            {active && (
+            {active && mode === "photos" && (
               <>
                 <div className={s.rightHead}>
                   <h3 className={s.rightTitle}>{active.owner_id}</h3>
@@ -155,19 +217,49 @@ export default function CollagePickerDialog({ onClose, onPick }: Props) {
                 </div>
               </>
             )}
+            {active && mode === "collage-only" && (
+              <div className={s.collagePreview}>
+                <div className={s.rightHead}>
+                  <h3 className={s.rightTitle}>{active.owner_id}</h3>
+                  <span className={s.rightSub}>
+                    {active.group_name} · {active.photos.length} фото
+                  </span>
+                </div>
+                <div className={s.grid}>
+                  {active.photos
+                    .filter((p) => p.state === "uploaded")
+                    .slice(0, 12)
+                    .map((p) => (
+                      <div key={p.id} className={s.cell}>
+                        <img src={p.url} alt="" />
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
         <div className={s.foot}>
           <button className={s.cancel} onClick={onClose}>
             Отмена
           </button>
-          <button
-            className={s.confirm}
-            onClick={confirm}
-            disabled={picked.size === 0}
-          >
-            Добавить ({picked.size})
-          </button>
+          {mode === "photos" ? (
+            <button
+              className={s.confirm}
+              onClick={confirmPhotos}
+              disabled={picked.size === 0}
+            >
+              Добавить ({picked.size})
+            </button>
+          ) : (
+            <button
+              className={s.confirm}
+              onClick={confirmCollage}
+              disabled={active === null}
+            >
+              {active ? `Перенести в ${active.owner_id}` : "Выбери коллаж"}
+            </button>
+          )}
         </div>
       </div>
     </div>
