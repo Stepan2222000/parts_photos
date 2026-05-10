@@ -100,8 +100,11 @@ def move_studio_to_photos(src_key: str, dest_key: str) -> None:
     collage — the file's storage of record becomes the photos bucket and
     the studio_job just keeps a reference via transferred_to_photo_id.
     """
+    import logging
+
     from minio.commonconfig import CopySource
 
+    log = logging.getLogger("studio.storage")
     c = photos_client()
     c.copy_object(
         bucket_name=settings.minio_bucket,
@@ -110,7 +113,12 @@ def move_studio_to_photos(src_key: str, dest_key: str) -> None:
     )
     try:
         c.remove_object(studio_bucket(), src_key)
-    except Exception:
-        # Source removal is best-effort: copy already succeeded, the result
-        # is safe in the photos bucket. An orphan in studio bucket is OK.
-        pass
+    except Exception as e:
+        # Copy already succeeded, the file is safe in the photos bucket.
+        # Surface the orphan loudly in the log instead of silently swallowing.
+        log.warning(
+            "studio orphan: copied %s → %s but failed to delete source: %s",
+            src_key,
+            dest_key,
+            e,
+        )

@@ -66,37 +66,27 @@ export default function StudioClient({
   // ── Load libraries + batches on mount, and pre-fill source if asked ───────
   useEffect(() => {
     void refreshAll();
-    if (initialSourcePhotoId) {
-      void api.collages
-        .search({ q: "", limit: 1 })
-        .catch(() => null); // tolerate missing endpoint
-      // Pre-fill the picked-photo source by loading the photo from any
-      // collage. We fetch the full collage detail so we can show a thumb.
-      // Easiest is to look up by photo via search; fall back to a stub.
+    // Quick-action из коллажа: на странице ?source_photo_id=X&target_collage_id=Y
+    // подтягиваем фото-источник, чтобы пользователь сразу видел превью.
+    if (initialSourcePhotoId && initialTargetCollageId) {
       (async () => {
-        try {
-          // We don't have a direct GET /photos/{id} endpoint. Instead, look
-          // through collage detail of target_collage_id (it's the most likely
-          // source). If not found, we still seed an opaque entry so the user
-          // can see "1 photo selected".
-          if (initialTargetCollageId) {
-            const c = await api.collages.get(initialTargetCollageId);
-            const p = c.photos.find((x) => x.id === initialSourcePhotoId);
-            if (p) {
-              setCollagePhotos([
-                {
-                  id: p.id,
-                  url: p.url,
-                  collageId: c.id,
-                  collageOwnerId: c.owner_id,
-                },
-              ]);
-            }
-          }
-        } catch {
-          // ignore — quick-action just won't pre-populate the thumb
+        const c = await api.collages.get(initialTargetCollageId);
+        const p = c.photos.find((x) => x.id === initialSourcePhotoId);
+        if (!p) {
+          setError(
+            `Фото ${initialSourcePhotoId} не найдено в коллаже ${initialTargetCollageId}`,
+          );
+          return;
         }
-      })();
+        setCollagePhotos([
+          {
+            id: p.id,
+            url: p.url,
+            collageId: c.id,
+            collageOwnerId: c.owner_id,
+          },
+        ]);
+      })().catch((e) => setError(`Не удалось загрузить исходное фото: ${e}`));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -111,12 +101,8 @@ export default function StudioClient({
     setWatermarks(ws);
     setBatches(lst);
     if (activeBatchId) {
-      try {
-        const det = await api.studio.getBatch(activeBatchId);
-        setActiveBatch(det);
-      } catch {
-        setActiveBatch(null);
-      }
+      const det = await api.studio.getBatch(activeBatchId);
+      setActiveBatch(det);
     }
   }, [activeBatchId]);
 
@@ -131,16 +117,20 @@ export default function StudioClient({
         const det = await api.studio.getBatch(activeBatchId!);
         if (!mounted) return;
         setActiveBatch(det);
-        // also refresh history rail counters
         const lst = await api.studio.listBatches(50);
         if (!mounted) return;
         setBatches(lst);
         if (det.status === "queued" || det.status === "running") {
           pollRef.current = window.setTimeout(tick, 2000);
         }
-      } catch {
-        // transient — back off
-        pollRef.current = window.setTimeout(tick, 5000);
+      } catch (e) {
+        // Surface the failure instead of silently re-trying. Common case:
+        // batch was deleted concurrently → 404. User sees the error and can
+        // pick another batch.
+        if (mounted) {
+          setError(`Не удалось загрузить батч: ${e}`);
+          setActiveBatchId(null);
+        }
       }
     }
     tick();

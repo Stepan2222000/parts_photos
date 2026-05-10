@@ -1,7 +1,7 @@
 """DB-backed article matching: filename stem → list of matching collages."""
 from __future__ import annotations
 
-import asyncpg
+import asyncpg  # noqa: F401  — kept for type-hint reference in callers
 
 from studio_core.article_match import normalize_filename_stem
 
@@ -37,11 +37,7 @@ async def find_matches(filename: str | None, conn: asyncpg.Connection) -> list[d
     norm = normalize_filename_stem(filename)
     if not norm:
         return []
-    try:
-        rows = await conn.fetch(_MATCH_QUERY, norm)
-    except asyncpg.UndefinedTableError:
-        # smart_ext FDW not installed in this environment
-        rows = []
+    rows = await conn.fetch(_MATCH_QUERY, norm)
     out: list[dict] = []
     for r in rows:
         articles = list(r["owner_articles"] or []) if "owner_articles" in r else []
