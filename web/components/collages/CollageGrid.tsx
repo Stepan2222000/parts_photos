@@ -1,4 +1,9 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { api, ApiError } from "@/lib/api";
 import type { Collage } from "@/lib/types";
 import s from "./CollageGrid.module.css";
 
@@ -26,13 +31,48 @@ function WarnIcon() {
   );
 }
 
+function TrashIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6h18" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <path d="M10 11v6M14 11v6" />
+    </svg>
+  );
+}
+
 export default function CollageGrid({ collages, showGroup }: Props) {
+  const router = useRouter();
+  const [deleting, setDeleting] = useState<string | null>(null);
+
   if (collages.length === 0) {
     return (
       <div style={{ marginTop: 32, color: "var(--text-muted)" }}>
         Коллажей пока нет. Создай первый.
       </div>
     );
+  }
+
+  async function onDelete(c: Collage, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (deleting) return;
+    const what =
+      c.photos_count > 0
+        ? `Удалить коллаж «${c.owner_name || c.owner_id}» вместе с ${c.photos_count} фото? Это нельзя отменить.`
+        : `Удалить коллаж «${c.owner_name || c.owner_id}»?`;
+    if (!confirm(what)) return;
+    setDeleting(c.id);
+    try {
+      await api.collages.delete(c.id);
+      router.refresh();
+    } catch (err) {
+      const msg = err instanceof ApiError ? `${err.status}: ${err.body}` : String(err);
+      alert(`Не удалось удалить: ${msg}`);
+    } finally {
+      setDeleting(null);
+    }
   }
 
   return (
@@ -50,6 +90,16 @@ export default function CollageGrid({ collages, showGroup }: Props) {
             {showGroup && c.group_name && (
               <span className={s.groupBadge}>{c.group_name}</span>
             )}
+            <button
+              type="button"
+              className={s.deleteBtn}
+              title="Удалить коллаж"
+              aria-label="Удалить коллаж"
+              disabled={deleting === c.id}
+              onClick={(e) => onDelete(c, e)}
+            >
+              <TrashIcon />
+            </button>
           </div>
           <div className={s.meta}>
             <div className={s.name}>

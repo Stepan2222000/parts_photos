@@ -45,6 +45,32 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
+.deleteBtn {
+  position: absolute;
+  top: 8px; right: 8px;
+  width: 28px; height: 28px;
+  display: grid; place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease, background 0.12s ease, transform 0.1s ease;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+.deleteBtn svg { width: 14px; height: 14px; }
+.card:hover .deleteBtn { opacity: 1; }
+.deleteBtn:hover {
+  background: var(--error-product);
+  transform: scale(1.05);
+}
+.deleteBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .meta { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 4px; }
 .name {
   color: var(--text-strong); font-size: 13.5px; font-weight: 500; line-height: 1.35;
