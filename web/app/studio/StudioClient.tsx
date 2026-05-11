@@ -34,7 +34,9 @@ const DEFAULT_OPTIONS: StudioOptions = {
 
 interface Props {
   initialSourcePhotoId: string | null;
-  initialTargetCollageId: string | null;
+  /** Optional collage to pull `initialSourcePhotoId` from. Quick-action URL
+   *  parameter — does NOT preselect a transfer target. */
+  initialSourceCollageId: string | null;
   initialBatchId: string | null;
 }
 
@@ -78,7 +80,7 @@ function submitButtonLabel(submitting: boolean, missing: string[], n: number): s
 
 export default function StudioClient({
   initialSourcePhotoId,
-  initialTargetCollageId,
+  initialSourceCollageId,
   initialBatchId,
 }: Props) {
   const router = useRouter();
@@ -91,9 +93,6 @@ export default function StudioClient({
   const [watermarks, setWatermarks] = useState<StudioAsset[]>([]);
   const [bgId, setBgId] = useState<string | null>(null);
   const [wmId, setWmId] = useState<string | null>(null);
-  const [targetCollageId, setTargetCollageId] = useState<string | null>(
-    initialTargetCollageId,
-  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -106,13 +105,15 @@ export default function StudioClient({
     void refreshAll();
     // Quick-action из коллажа: на странице ?source_photo_id=X&target_collage_id=Y
     // подтягиваем фото-источник, чтобы пользователь сразу видел превью.
-    if (initialSourcePhotoId && initialTargetCollageId) {
+    // (target_collage_id здесь — это collage-источник для удобного fetch'а
+    // фотки; куда положить результат — выбирается уже после генерации.)
+    if (initialSourcePhotoId && initialSourceCollageId) {
       (async () => {
-        const c = await api.collages.get(initialTargetCollageId);
+        const c = await api.collages.get(initialSourceCollageId);
         const p = c.photos.find((x) => x.id === initialSourcePhotoId);
         if (!p) {
           setError(
-            `Фото ${initialSourcePhotoId} не найдено в коллаже ${initialTargetCollageId}`,
+            `Фото ${initialSourcePhotoId} не найдено в коллаже ${initialSourceCollageId}`,
           );
           return;
         }
@@ -207,7 +208,6 @@ export default function StudioClient({
         customPrompt: customPrompt.trim() || undefined,
         backgroundId: bgId ?? undefined,
         watermarkId: wmId ?? undefined,
-        targetCollageId: targetCollageId ?? undefined,
         sourcePhotoIds: collagePhotos.map((p) => p.id),
         files,
       });
@@ -287,8 +287,6 @@ export default function StudioClient({
               onFilesChange={setFiles}
               collagePhotos={collagePhotos}
               onCollagePhotosChange={setCollagePhotos}
-              targetCollageId={targetCollageId}
-              onTargetCollageChange={setTargetCollageId}
             />
 
             <OptionsPanel

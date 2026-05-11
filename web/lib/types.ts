@@ -87,12 +87,19 @@ export interface StudioAsset {
   uploaded_at: string;
 }
 
-export interface SuggestedTransfer {
-  collage_id: string;
-  group_id: string;
-  owner_id: string;
-  owner_name: string | null;
+export interface SuggestedItem {
+  item_id: number;
+  defect: boolean;
+  defect_note: string | null;
+  existing_collage_id: string | null;
+}
+
+export interface JobSuggestions {
+  smart_part_id: string;
+  smart_part_name: string | null;
   matched_article: string;
+  /** keys are group UUIDs */
+  items_by_group: Record<string, SuggestedItem[]>;
 }
 
 export interface StudioJob {
@@ -113,7 +120,8 @@ export interface StudioJob {
   started_at: string | null;
   finished_at: string | null;
   transferred_to_photo_id: string | null;
-  suggested: SuggestedTransfer[];
+  transferred_to_group_id: string | null;
+  suggestions: JobSuggestions | null;
   created_at: string;
 }
 
@@ -124,7 +132,6 @@ export interface StudioBatch {
   custom_prompt: string | null;
   background_id: string | null;
   watermark_id: string | null;
-  target_collage_id: string | null;
   status: StudioBatchStatus;
   total: number;
   done: number;
@@ -135,4 +142,11 @@ export interface StudioBatch {
 
 export interface StudioBatchDetail extends StudioBatch {
   jobs: StudioJob[];
+}
+
+export interface LookupItem {
+  item_id: number;
+  defect: boolean;
+  defect_note: string | null;
+  existing_collage_id: string | null;
 }

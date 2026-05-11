@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { api } from "@/lib/api";
-import type { Group } from "@/lib/types";
 import CollagePickerDialog from "./CollagePickerDialog";
 import s from "./SourcesPanel.module.css";
 
@@ -30,8 +28,6 @@ interface Props {
   onFilesChange: (f: File[]) => void;
   collagePhotos: CollagePickedPhoto[];
   onCollagePhotosChange: (p: CollagePickedPhoto[]) => void;
-  targetCollageId: string | null;
-  onTargetCollageChange: (id: string | null) => void;
 }
 
 export default function SourcesPanel({
@@ -39,8 +35,6 @@ export default function SourcesPanel({
   onFilesChange,
   collagePhotos,
   onCollagePhotosChange,
-  targetCollageId,
-  onTargetCollageChange,
 }: Props) {
   const [tab, setTab] = useState<"upload" | "collage">("upload");
   const [over, setOver] = useState(false);
@@ -186,19 +180,6 @@ export default function SourcesPanel({
           ))}
         </div>
       )}
-
-      <div className={s.target}>
-        <label className={s.targetLabel}>
-          Куда положить результаты после генерации
-        </label>
-        <CollageInlineSearch
-          value={targetCollageId}
-          onChange={onTargetCollageChange}
-        />
-        <p className={s.targetHint}>
-          Опционально. Если не выбрать — результаты остаются в Studio, переносятся вручную из истории.
-        </p>
-      </div>
     </div>
   );
 }
@@ -211,88 +192,4 @@ function FileThumb({ file }: { file: File }) {
     return () => URL.revokeObjectURL(url);
   }, [file]);
   return src ? <img src={src} alt="" /> : <div className={s.thumbStub} />;
-}
-
-function CollageInlineSearch({
-  value,
-  onChange,
-}: {
-  value: string | null;
-  onChange: (id: string | null) => void;
-}) {
-  const [q, setQ] = useState("");
-  const [results, setResults] = useState<{ id: string; owner_id: string; group_name?: string | null }[]>([]);
-  const [open, setOpen] = useState(false);
-  const [resolved, setResolved] = useState<{ id: string; owner_id: string } | null>(null);
-
-  async function lookup(text: string) {
-    setQ(text);
-    if (text.length < 2) {
-      setResults([]);
-      return;
-    }
-    try {
-      const r = await api.collages.search({ q: text, limit: 8 });
-      setResults(
-        r.map((c) => ({ id: c.id, owner_id: c.owner_id, group_name: c.group_name })),
-      );
-      setOpen(true);
-    } catch {
-      setResults([]);
-    }
-  }
-
-  // Resolve the picked collage's display name once per `value` change.
-  useEffect(() => {
-    if (!value) { setResolved(null); return; }
-    if (resolved?.id === value) return;
-    let alive = true;
-    api.collages.get(value)
-      .then((c) => alive && setResolved({ id: c.id, owner_id: c.owner_id }))
-      .catch(() => alive && setResolved({ id: value, owner_id: value }));
-    return () => { alive = false; };
-  }, [value, resolved?.id]);
-
-  if (value && resolved?.id === value) {
-    return (
-      <div className={s.targetPicked}>
-        <span className={s.targetPickedName}>{resolved.owner_id}</span>
-        <button className={s.targetClear} onClick={() => onChange(null)}>×</button>
-      </div>
-    );
-  }
-
-  return (
-    <div className={s.targetSearch}>
-      <input
-        className={s.targetInput}
-        placeholder="Найти коллаж по smart-id или артикулу…"
-        value={q}
-        onChange={(e) => lookup(e.target.value)}
-        onFocus={() => results.length > 0 && setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
-      />
-      {open && results.length > 0 && (
-        <ul className={s.targetDrop}>
-          {results.map((c) => (
-            <li
-              key={c.id}
-              className={s.targetOpt}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                onChange(c.id);
-                setOpen(false);
-                setQ("");
-              }}
-            >
-              <span className={s.targetOptName}>{c.owner_id}</span>
-              {c.group_name && (
-                <span className={s.targetOptGroup}>{c.group_name}</span>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
 }

@@ -96,7 +96,7 @@ async def claim_one(conn: asyncpg.Connection) -> dict | None:
             SELECT j.id, j.batch_id, j.source_kind, j.source_filename,
                    j.source_s3_key, j.source_photo_id,
                    b.options_json, b.custom_prompt, b.background_id,
-                   b.watermark_id, b.target_collage_id
+                   b.watermark_id
             FROM studio_jobs j
             JOIN studio_batches b ON b.id = j.batch_id
             WHERE j.status = 'queued'
@@ -135,7 +135,7 @@ async def succeed_job(
     log_tail: str,
     tokens_used: int | None,
     elapsed_seconds: float,
-    suggestions: list[dict],
+    suggestions: dict | None,
 ) -> None:
     await pool().execute(
         """
@@ -272,7 +272,7 @@ async def run_one_job(job: dict, work_dir: Path, ad_pool: AdaptivePool) -> bool:
         result_key = f"results/{job['batch_id']}/{job_id}.png"
         await asyncio.to_thread(put_bytes, result_key, result_bytes, "image/png")
 
-        suggestions: list[dict] = []
+        suggestions: dict | None = None
         if job["source_filename"]:
             async with pool().acquire() as conn:
                 suggestions = await find_matches(job["source_filename"], conn)

@@ -2,6 +2,7 @@ import type {
   Collage,
   CollageDetail,
   Group,
+  LookupItem,
   OwnerSearchResult,
   Photo,
   StudioAsset,
@@ -138,19 +139,25 @@ export const api = {
       req<void>(`/studio/batches/${id}`, { method: "DELETE" }),
 
     getJob: (id: string) => req<StudioJob>(`/studio/jobs/${id}`),
-    transferJob: (jobId: string, collageId: string) =>
-      req<Photo>(`/studio/jobs/${jobId}/transfer`, {
-        method: "POST",
-        body: JSON.stringify({ collage_id: collageId }),
-      }),
-    transferSuggested: (
+
+    targetGroups: () =>
+      req<{ id: string; name: string; defect_filter: "with" | "without" | "any" }[]>(
+        "/studio/target-groups",
+      ),
+
+    transfers: (
       batchId: string,
-      transfers: { job_id: string; collage_id: string }[],
+      transfers: { job_id: string; group_id: string; item_id: number }[],
     ) =>
-      req<Photo[]>(`/studio/batches/${batchId}/transfer-suggested`, {
+      req<Photo[]>(`/studio/batches/${batchId}/transfers`, {
         method: "POST",
         body: JSON.stringify({ transfers }),
       }),
+
+    lookup: (smartPartId: string, groupId: string) =>
+      req<LookupItem[]>(
+        `/studio/lookup?smart_part_id=${encodeURIComponent(smartPartId)}&group_id=${encodeURIComponent(groupId)}`,
+      ),
 
     createBatch: async (input: {
       options: StudioOptions;
@@ -158,7 +165,6 @@ export const api = {
       customPrompt?: string;
       backgroundId?: string;
       watermarkId?: string;
-      targetCollageId?: string;
       sourcePhotoIds?: string[];
       files?: File[];
     }): Promise<StudioBatch> => {
@@ -168,7 +174,6 @@ export const api = {
       if (input.customPrompt) fd.append("custom_prompt", input.customPrompt);
       if (input.backgroundId) fd.append("background_id", input.backgroundId);
       if (input.watermarkId) fd.append("watermark_id", input.watermarkId);
-      if (input.targetCollageId) fd.append("target_collage_id", input.targetCollageId);
       if (input.sourcePhotoIds && input.sourcePhotoIds.length) {
         fd.append("source_photo_ids", input.sourcePhotoIds.join(","));
       }

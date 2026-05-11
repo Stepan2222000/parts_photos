@@ -4,6 +4,8 @@ import StudioClient from "./StudioClient";
 
 interface SP {
   source_photo_id?: string;
+  // target_collage_id is accepted (legacy quick-action URL) but ignored —
+  // the target now is chosen on the results screen.
   target_collage_id?: string;
   batch?: string;
 }
@@ -23,7 +25,7 @@ export default async function StudioPage({
     >
       <StudioClient
         initialSourcePhotoId={sp.source_photo_id ?? null}
-        initialTargetCollageId={sp.target_collage_id ?? null}
+        initialSourceCollageId={sp.target_collage_id ?? null}
         initialBatchId={sp.batch ?? null}
       />
     </Shell>

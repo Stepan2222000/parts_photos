@@ -24,12 +24,18 @@ class StudioAsset(BaseModel):
     uploaded_at: datetime
 
 
-class SuggestedTransfer(BaseModel):
-    collage_id: UUID
-    group_id: UUID
-    owner_id: str
-    owner_name: str | None
+class SuggestedItem(BaseModel):
+    item_id: int
+    defect: bool
+    defect_note: str | None = None
+    existing_collage_id: UUID | None = None
+
+
+class JobSuggestions(BaseModel):
+    smart_part_id: str
+    smart_part_name: str | None
     matched_article: str
+    items_by_group: dict[str, list[SuggestedItem]] = Field(default_factory=dict)
 
 
 class StudioJob(BaseModel):
@@ -50,7 +56,8 @@ class StudioJob(BaseModel):
     started_at: datetime | None
     finished_at: datetime | None
     transferred_to_photo_id: UUID | None
-    suggested: list[SuggestedTransfer] = []
+    transferred_to_group_id: UUID | None = None
+    suggestions: JobSuggestions | None = None
     created_at: datetime
 
 
@@ -61,7 +68,6 @@ class StudioBatch(BaseModel):
     custom_prompt: str | None
     background_id: UUID | None
     watermark_id: UUID | None
-    target_collage_id: UUID | None
     status: BatchStatus
     total: int
     done: int
@@ -74,14 +80,24 @@ class StudioBatchDetail(StudioBatch):
     jobs: list[StudioJob] = []
 
 
-class TransferRequest(BaseModel):
-    collage_id: UUID
-
-
-class BulkTransferEntry(BaseModel):
+class TransferEntry(BaseModel):
     job_id: UUID
-    collage_id: UUID
+    group_id: UUID
+    item_id: int
 
 
-class BulkTransferRequest(BaseModel):
-    transfers: list[BulkTransferEntry] = Field(min_length=1)
+class TransferRequest(BaseModel):
+    transfers: list[TransferEntry] = Field(min_length=1)
+
+
+class LookupItem(BaseModel):
+    item_id: int
+    defect: bool
+    defect_note: str | None = None
+    existing_collage_id: UUID | None = None
+
+
+class TargetGroup(BaseModel):
+    id: UUID
+    name: str
+    defect_filter: Literal["with", "without", "any"]

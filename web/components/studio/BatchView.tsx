@@ -1,10 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { Group, StudioBatchDetail, StudioJob } from "@/lib/types";
 import { api } from "@/lib/api";
-import type { StudioBatchDetail, StudioJob } from "@/lib/types";
-import CollagePickerDialog from "./CollagePickerDialog";
-import TransferSuggestions from "./TransferSuggestions";
+import TransferPanel from "./TransferPanel";
 import s from "./BatchView.module.css";
 
 interface Props {
@@ -15,6 +14,11 @@ interface Props {
 
 export default function BatchView({ batch, onBack, onTransferred }: Props) {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [groups, setGroups] = useState<Group[]>([]);
+
+  useEffect(() => {
+    api.groups.list().then(setGroups).catch(() => setGroups([]));
+  }, []);
 
   if (!batch) {
     return (
@@ -28,6 +32,8 @@ export default function BatchView({ batch, onBack, onTransferred }: Props) {
 
   const pct = batch.total > 0 ? Math.round((batch.done / batch.total) * 100) : 0;
   const activeJob = batch.jobs.find((j) => j.id === activeJobId) || null;
+  const groupNameById = (id: string | null) =>
+    id ? (groups.find((g) => g.id === id)?.name || id.slice(0, 8)) : null;
 
   return (
     <div>
@@ -61,10 +67,7 @@ export default function BatchView({ batch, onBack, onTransferred }: Props) {
         </div>
       </div>
 
-      <TransferSuggestions
-        batch={batch}
-        onTransferred={onTransferred}
-      />
+      <TransferPanel batch={batch} onTransferred={onTransferred} />
 
       <div className={s.grid}>
         {batch.jobs.map((j) => (
@@ -72,6 +75,7 @@ export default function BatchView({ batch, onBack, onTransferred }: Props) {
             key={j.id}
             job={j}
             active={activeJobId === j.id}
+            groupName={groupNameById(j.transferred_to_group_id)}
             onSelect={() => setActiveJobId(j.id === activeJobId ? null : j.id)}
           />
         ))}
@@ -80,8 +84,8 @@ export default function BatchView({ batch, onBack, onTransferred }: Props) {
       {activeJob && (
         <JobDrawer
           job={activeJob}
+          groupName={groupNameById(activeJob.transferred_to_group_id)}
           onClose={() => setActiveJobId(null)}
-          onTransferred={onTransferred}
         />
       )}
     </div>
@@ -93,12 +97,11 @@ const STATUS_LABEL: Record<StudioJob["status"], string> = {
 };
 
 function JobCard({
-  job,
-  active,
-  onSelect,
+  job, active, groupName, onSelect,
 }: {
   job: StudioJob;
   active: boolean;
+  groupName: string | null;
   onSelect: () => void;
 }) {
   const isFailed = job.status === "failed";
@@ -122,7 +125,9 @@ function JobCard({
           {STATUS_LABEL[job.status]}
         </span>
         {job.transferred_to_photo_id && (
-          <span className={s.transferred}>в коллаже</span>
+          <span className={s.transferred} title={groupName || ""}>
+            {groupName ? `в ${groupName}` : "в коллаже"}
+          </span>
         )}
       </div>
       <div className={s.cardFoot}>
@@ -138,32 +143,13 @@ function JobCard({
 }
 
 function JobDrawer({
-  job,
-  onClose,
-  onTransferred,
+  job, groupName, onClose,
 }: {
   job: StudioJob;
+  groupName: string | null;
   onClose: () => void;
-  onTransferred: () => Promise<void> | void;
 }) {
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
   const transferred = !!job.transferred_to_photo_id;
-  const canTransfer = job.status === "succeeded" && !transferred;
-
-  async function transferTo(collageId: string) {
-    if (busy) return;
-    setBusy(true);
-    try {
-      await api.studio.transferJob(job.id, collageId);
-      setPickerOpen(false);
-      await onTransferred();
-    } catch (e) {
-      alert(`Не удалось перенести: ${e}`);
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <div className={s.drawerBack} onClick={onClose}>
@@ -175,29 +161,11 @@ function JobDrawer({
           <button className={s.drawerClose} onClick={onClose}>×</button>
         </div>
 
-        {(canTransfer || transferred) && (
+        {transferred && (
           <div className={s.transferBar}>
-            {transferred ? (
-              <div className={s.transferredBadge}>
-                <span>✓ Перенесено в коллаж</span>
-                {job.suggested && job.suggested[0] && (
-                  <a
-                    className={s.transferredLink}
-                    href={`/collages/${job.transferred_to_photo_id ? job.suggested[0].collage_id : ""}`}
-                  >
-                    Открыть коллаж →
-                  </a>
-                )}
-              </div>
-            ) : (
-              <button
-                className={s.transferBtn}
-                onClick={() => setPickerOpen(true)}
-                disabled={busy}
-              >
-                {busy ? "Переношу…" : "Перенести в коллаж…"}
-              </button>
-            )}
+            <div className={s.transferredBadge}>
+              <span>✓ Перенесено{groupName ? ` в ${groupName}` : ""}</span>
+            </div>
           </div>
         )}
 
@@ -225,15 +193,6 @@ function JobDrawer({
             <summary>Логи codex</summary>
             <pre className={s.log}>{job.log_tail}</pre>
           </details>
-        )}
-        {pickerOpen && (
-          <CollagePickerDialog
-            mode="collage-only"
-            title="Перенести результат в коллаж"
-            suggestions={job.suggested}
-            onClose={() => setPickerOpen(false)}
-            onPickCollage={(c) => transferTo(c.id)}
-          />
         )}
       </div>
     </div>
