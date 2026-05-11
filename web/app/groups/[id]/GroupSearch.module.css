@@ -1,0 +1,46 @@
+.wrap {
+  margin-top: 22px;
+}
+
+.inputWrap {
+  max-width: 520px;
+}
+
+.input {
+  width: 100%;
+  min-height: 44px;
+  padding: 11px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-strong);
+  font-family: inherit;
+  font-size: 14px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--brand-coral);
+}
+
+.input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  background: var(--text-faint);
+  cursor: pointer;
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M18 6L6 18M6 6l12 12' stroke='black' stroke-width='2' fill='none' stroke-linecap='round'/></svg>") center/contain no-repeat;
+}
+
+.stats {
+  margin-top: 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.stats strong {
+  color: var(--text-strong);
+  font-weight: 500;
+}
