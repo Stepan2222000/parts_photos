@@ -6,6 +6,18 @@ import type { Group } from "@/lib/types";
 import CollagePickerDialog from "./CollagePickerDialog";
 import s from "./SourcesPanel.module.css";
 
+// Safari/macOS converts and renames any picked file to "tempImageXXXX.heic"
+// when accept contains heic/heif (WebKit bug 244666). On Safari we drop the
+// explicit heic hints — macOS still surfaces .heic via image/*, and this way
+// the original filename survives, which the article-matching feature needs.
+const isSafariMac = (): boolean => {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  return /Macintosh/.test(ua) && /Safari/.test(ua) && !/Chrome|CriOS|FxiOS|Edg/.test(ua);
+};
+const acceptImages = (): string =>
+  isSafariMac() ? "image/*" : "image/*,.heic,.heif";
+
 export interface CollagePickedPhoto {
   id: string;
   url: string;
@@ -107,7 +119,7 @@ export default function SourcesPanel({
           <input
             ref={fileInput}
             type="file"
-            accept="image/*,.heic,.heif"
+            accept={acceptImages()}
             multiple
             style={{ display: "none" }}
             onChange={(e) => {
