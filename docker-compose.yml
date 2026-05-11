@@ -7,16 +7,16 @@ services:
       - "3200:8001"
     environment:
       PG_DSN: postgresql://admin:Password123@parts_photos:5432/parts_photos
-      MINIO_ENDPOINT: 2.26.53.128:9000
+      MINIO_ENDPOINT: 194.164.245.107:9000
       MINIO_ACCESS_KEY: admin
       MINIO_SECRET_KEY: Password123
       MINIO_BUCKET: parts-photos
-      MINIO_PUBLIC_BASE: http://2.26.53.128:9000/parts-photos
+      MINIO_PUBLIC_BASE: http://194.164.245.107:9000/parts-photos
       MINIO_SECURE: "false"
-      WEB_ORIGIN: http://2.26.53.128:3100
+      WEB_ORIGIN: http://194.164.245.107:3100
       API_PORT: "8001"
       STUDIO_MINIO_BUCKET: parts-photos-studio
-      STUDIO_MINIO_PUBLIC_BASE: http://2.26.53.128:9000/parts-photos-studio
+      STUDIO_MINIO_PUBLIC_BASE: http://194.164.245.107:9000/parts-photos-studio
     networks:
       - db_default
 
@@ -27,14 +27,14 @@ services:
     command: ["python", "-m", "app.studio.worker"]
     environment:
       PG_DSN: postgresql://admin:Password123@parts_photos:5432/parts_photos
-      MINIO_ENDPOINT: 2.26.53.128:9000
+      MINIO_ENDPOINT: 194.164.245.107:9000
       MINIO_ACCESS_KEY: admin
       MINIO_SECRET_KEY: Password123
       MINIO_BUCKET: parts-photos
-      MINIO_PUBLIC_BASE: http://2.26.53.128:9000/parts-photos
+      MINIO_PUBLIC_BASE: http://194.164.245.107:9000/parts-photos
       MINIO_SECURE: "false"
       STUDIO_MINIO_BUCKET: parts-photos-studio
-      STUDIO_MINIO_PUBLIC_BASE: http://2.26.53.128:9000/parts-photos-studio
+      STUDIO_MINIO_PUBLIC_BASE: http://194.164.245.107:9000/parts-photos-studio
       STUDIO_MIN_WORKERS: "2"
       STUDIO_MAX_WORKERS: "10"
       STUDIO_LOG_LEVEL: INFO
@@ -57,7 +57,7 @@ services:
       - "3100:3000"
     environment:
       PHOTOS_API_BASE: http://parts_photos_api:8001
-      NEXT_PUBLIC_PHOTOS_API_BASE: http://2.26.53.128:3200
+      NEXT_PUBLIC_PHOTOS_API_BASE: http://194.164.245.107:3200
     depends_on:
       - api
     networks:
