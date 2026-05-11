@@ -26,8 +26,30 @@
 .head {
   position: relative;
   margin-bottom: var(--sp-md);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }
 .headLeft { max-width: 60ch; }
+
+.helpBtn {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-body);
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.helpBtn:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-strong);
+  border-color: var(--border-strong);
+}
 .title {
   font-family: var(--font-serif);
   font-size: 24px;
@@ -114,6 +136,153 @@
   background: var(--bg-pill);
   color: var(--text-faint);
 }
+
+.kindChip {
+  font-style: normal;
+  font-size: 10.5px;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.15);
+  color: inherit;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  letter-spacing: 0.2px;
+  text-transform: lowercase;
+  font-family: var(--font-mono);
+}
+.tab:not(.tabActive) .kindChip {
+  background: var(--bg-pill);
+  color: var(--text-faint);
+}
+
+/* ── rules modal ─────────────────────────────────────────────────────────── */
+
+.modalBack {
+  position: fixed;
+  inset: 0;
+  background: var(--modal-backdrop);
+  display: grid;
+  place-items: center;
+  z-index: 200;
+  animation: fade 0.15s ease;
+  padding: 24px;
+}
+@keyframes fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.modal {
+  background: var(--modal-bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-lg);
+  max-width: 920px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+}
+.modalHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.modalTitle {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--text-strong);
+  margin: 0;
+}
+.modalClose {
+  background: transparent;
+  border: 0;
+  font-size: 24px;
+  color: var(--text-muted);
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-pill);
+  display: grid;
+  place-items: center;
+  transition: background 0.1s ease, color 0.1s ease;
+}
+.modalClose:hover { background: var(--hover-strong); color: var(--text-strong); }
+.modalSub {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 0 0 var(--sp-md);
+  max-width: 70ch;
+}
+
+.matrixWrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.matrix {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  background: var(--bg-card);
+}
+.matrixCorner {
+  background: var(--bg-card-hover);
+  text-align: left;
+  padding: 12px 14px;
+  font-weight: 500;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
+}
+.matrixHead {
+  background: var(--bg-card-hover);
+  padding: 12px 14px;
+  text-align: center;
+  font-weight: 500;
+  color: var(--text-strong);
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+  vertical-align: top;
+  min-width: 130px;
+}
+.matrixHeadSub {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  font-weight: 400;
+  margin-top: 2px;
+  text-transform: lowercase;
+}
+.matrixRowHead {
+  text-align: left;
+  padding: 10px 14px;
+  font-weight: 500;
+  color: var(--text-strong);
+  font-size: 12.5px;
+  background: var(--bg-card-hover);
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
+}
+.matrixYes, .matrixNo {
+  text-align: center;
+  padding: 10px;
+  font-size: 18px;
+  font-weight: 500;
+  border-bottom: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+}
+.matrixYes { color: var(--accent-teal); }
+.matrixNo  { color: var(--error-product); opacity: 0.65; }
+.matrix tr:last-child .matrixYes,
+.matrix tr:last-child .matrixNo,
+.matrix tr:last-child .matrixRowHead { border-bottom: 0; }
 
 /* ── empty state ─────────────────────────────────────────────────────────── */
 

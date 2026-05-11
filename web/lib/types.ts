@@ -94,12 +94,35 @@ export interface SuggestedItem {
   existing_collage_id: string | null;
 }
 
+export type GroupSuggestion =
+  | { kind: "smart_part"; existing_collage_id: string | null }
+  | { kind: "instance"; items: SuggestedItem[] };
+
 export interface JobSuggestions {
   smart_part_id: string;
   smart_part_name: string | null;
   matched_article: string;
-  /** keys are group UUIDs */
-  items_by_group: Record<string, SuggestedItem[]>;
+  source_kind: "filename" | "source_collage";
+  /** keys are target-group UUIDs */
+  by_group: Record<string, GroupSuggestion>;
+}
+
+export interface TargetGroup {
+  id: string;
+  name: string;
+  owner_kind: "smart_part" | "instance";
+  defect_filter: "with" | "without" | "any";
+  accepts_defects: boolean;
+}
+
+export interface TransferRules {
+  /** target_uuid → list of allowed source ids ("upload" or source group uuid) */
+  allowed: Record<string, string[]>;
+}
+
+export interface LookupSmart {
+  smart_part_id: string;
+  existing_collage_id: string | null;
 }
 
 export interface StudioJob {
@@ -110,6 +133,7 @@ export interface StudioJob {
   source_s3_key: string;
   source_url: string;
   source_photo_id: string | null;
+  source_group_id: string | null;
   status: StudioJobStatus;
   result_s3_key: string | null;
   result_url: string | null;

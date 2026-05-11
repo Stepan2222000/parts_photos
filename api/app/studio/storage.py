@@ -87,3 +87,24 @@ def move_studio_to_photos(src_key: str, dest_key: str) -> None:
             dest_key,
             e,
         )
+
+
+def delete_prefix(bucket: str, prefix: str) -> int:
+    """Delete every object under `prefix` in `bucket`. Returns number deleted."""
+    c = minio()
+    deleted = 0
+    for obj in c.list_objects(bucket, prefix=prefix, recursive=True):
+        try:
+            c.remove_object(bucket, obj.object_name)
+            deleted += 1
+        except Exception as e:
+            log.warning("failed to delete %s/%s: %s", bucket, obj.object_name, e)
+    return deleted
+
+
+def delete_studio_prefix(prefix: str) -> int:
+    return delete_prefix(studio_bucket(), prefix)
+
+
+def delete_photos_prefix(prefix: str) -> int:
+    return delete_prefix(settings.minio_bucket, prefix)

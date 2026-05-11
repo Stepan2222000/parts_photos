@@ -190,6 +190,12 @@ async def get_collage(collage_id: UUID) -> CollageDetail:
 
 @router.delete("/collages/{collage_id}", status_code=204)
 async def delete_collage(collage_id: UUID) -> None:
-    res = await pool().execute("DELETE FROM photo_collages WHERE id = $1", collage_id)
-    if res.endswith(" 0"):
+    head = await pool().fetchrow(
+        "SELECT group_id FROM photo_collages WHERE id = $1", collage_id
+    )
+    if head is None:
         raise HTTPException(404, "Collage not found")
+    await pool().execute("DELETE FROM photo_collages WHERE id = $1", collage_id)
+    # Nuke MinIO files under this collage (DB cascade dropped the photo rows).
+    from ..studio.storage import delete_photos_prefix
+    delete_photos_prefix(f"groups/{head['group_id']}/collages/{collage_id}/")

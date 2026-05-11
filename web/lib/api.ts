@@ -3,6 +3,7 @@ import type {
   CollageDetail,
   Group,
   LookupItem,
+  LookupSmart,
   OwnerSearchResult,
   Photo,
   StudioAsset,
@@ -10,6 +11,8 @@ import type {
   StudioBatchDetail,
   StudioJob,
   StudioOptions,
+  TargetGroup,
+  TransferRules,
 } from "./types";
 
 const BASE =
@@ -140,23 +143,27 @@ export const api = {
 
     getJob: (id: string) => req<StudioJob>(`/studio/jobs/${id}`),
 
-    targetGroups: () =>
-      req<{ id: string; name: string; defect_filter: "with" | "without" | "any" }[]>(
-        "/studio/target-groups",
-      ),
+    targetGroups: () => req<TargetGroup[]>("/studio/target-groups"),
+
+    transferRules: () => req<TransferRules>("/studio/transfer-rules"),
 
     transfers: (
       batchId: string,
-      transfers: { job_id: string; group_id: string; item_id: number }[],
+      transfers: { job_id: string; group_id: string; item_id?: number | null }[],
     ) =>
       req<Photo[]>(`/studio/batches/${batchId}/transfers`, {
         method: "POST",
         body: JSON.stringify({ transfers }),
       }),
 
-    lookup: (smartPartId: string, groupId: string) =>
+    lookupItems: (smartPartId: string, groupId: string) =>
       req<LookupItem[]>(
-        `/studio/lookup?smart_part_id=${encodeURIComponent(smartPartId)}&group_id=${encodeURIComponent(groupId)}`,
+        `/studio/lookup/items?smart_part_id=${encodeURIComponent(smartPartId)}&group_id=${encodeURIComponent(groupId)}`,
+      ),
+
+    lookupSmart: (smartPartId: string, groupId: string) =>
+      req<LookupSmart>(
+        `/studio/lookup/smart?smart_part_id=${encodeURIComponent(smartPartId)}&group_id=${encodeURIComponent(groupId)}`,
       ),
 
     createBatch: async (input: {

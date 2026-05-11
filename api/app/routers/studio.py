@@ -14,10 +14,15 @@ from ..images import InvalidImage, _open_pil_from_bytes, ensure_codex_compatible
 from ..minio_client import public_url
 from ..models import Photo
 from ..studio import groups as gconfig
-from ..studio.article_match_db import items_for_part
+from ..studio.article_match_db import (
+    items_for_part,
+    smart_collage_for_part,
+)
 from ..studio.schemas import (
+    GroupSuggestion,
     JobSuggestions,
     LookupItem,
+    LookupSmart,
     StudioAsset,
     StudioBatch,
     StudioBatchDetail,
@@ -25,8 +30,11 @@ from ..studio.schemas import (
     SuggestedItem,
     TargetGroup,
     TransferRequest,
+    TransferRules,
 )
 from ..studio.storage import (
+    delete_photos_prefix,
+    delete_studio_prefix,
     fetch_to,  # noqa: F401  — re-exported for the worker
     move_studio_to_photos,
     put_bytes,
@@ -36,10 +44,14 @@ from ..studio.storage import (
 router = APIRouter(prefix="/studio", tags=["studio"])
 
 
+# ---------------------------------------------------------------------------
+# Decoders / row mappers
+# ---------------------------------------------------------------------------
+
+
 def _decode_for_codex(
     raw: bytes, source_mime: str, filename: str, *, prefer_png: bool
 ) -> tuple[bytes, str, str, int, int]:
-    """raw → (data, mime, ext, w, h), HTTP-400 on decode failure."""
     try:
         data, mime, ext = ensure_codex_compatible(
             raw, source_mime, prefer_png=prefer_png
@@ -53,14 +65,10 @@ def _decode_for_codex(
 
 def _row_to_asset(r: dict) -> StudioAsset:
     return StudioAsset(
-        id=r["id"],
-        name=r["name"],
-        s3_key=r["s3_key"],
+        id=r["id"], name=r["name"], s3_key=r["s3_key"],
         url=studio_url(r["s3_key"]),
-        width=r["width"],
-        height=r["height"],
-        size_bytes=r["size_bytes"],
-        uploaded_at=r["uploaded_at"],
+        width=r["width"], height=r["height"],
+        size_bytes=r["size_bytes"], uploaded_at=r["uploaded_at"],
     )
 
 
@@ -69,18 +77,12 @@ def _row_to_batch(r: dict) -> StudioBatch:
     if isinstance(options_json, str):
         options_json = json.loads(options_json)
     return StudioBatch(
-        id=r["id"],
-        name=r["name"],
+        id=r["id"], name=r["name"],
         options_json=options_json or {},
         custom_prompt=r["custom_prompt"],
-        background_id=r["background_id"],
-        watermark_id=r["watermark_id"],
-        status=r["status"],
-        total=r["total"],
-        done=r["done"],
-        failed=r["failed"],
-        created_at=r["created_at"],
-        finished_at=r["finished_at"],
+        background_id=r["background_id"], watermark_id=r["watermark_id"],
+        status=r["status"], total=r["total"], done=r["done"], failed=r["failed"],
+        created_at=r["created_at"], finished_at=r["finished_at"],
     )
 
 
@@ -91,19 +93,34 @@ def _parse_suggestions(raw) -> JobSuggestions | None:
         raw = json.loads(raw)
     if not isinstance(raw, dict) or not raw.get("smart_part_id"):
         return None
-    items_by_group = {
-        gid: [SuggestedItem(**it) for it in items]
-        for gid, items in (raw.get("items_by_group") or {}).items()
-    }
+    by_group = {}
+    for gid, slot in (raw.get("by_group") or {}).items():
+        if not isinstance(slot, dict):
+            continue
+        kind = slot.get("kind")
+        if kind == "smart_part":
+            by_group[gid] = GroupSuggestion(
+                kind="smart_part",
+                existing_collage_id=slot.get("existing_collage_id"),
+            )
+        elif kind == "instance":
+            by_group[gid] = GroupSuggestion(
+                kind="instance",
+                items=[SuggestedItem(**it) for it in (slot.get("items") or [])],
+            )
     return JobSuggestions(
         smart_part_id=raw["smart_part_id"],
         smart_part_name=raw.get("smart_part_name"),
-        matched_article=raw["matched_article"],
-        items_by_group=items_by_group,
+        matched_article=raw.get("matched_article", ""),
+        source_kind=raw.get("source_kind", "filename"),
+        by_group=by_group,
     )
 
 
-def _row_to_job(r: dict, transferred_photo_s3_key: str | None = None) -> StudioJob:
+def _row_to_job(
+    r: dict,
+    transferred_photo_s3_key: str | None = None,
+) -> StudioJob:
     suggestions = _parse_suggestions(r["suggested_collages_json"])
 
     if r["source_kind"] == "collage_photo":
@@ -119,22 +136,16 @@ def _row_to_job(r: dict, transferred_photo_s3_key: str | None = None) -> StudioJ
         result_url = None
 
     return StudioJob(
-        id=r["id"],
-        batch_id=r["batch_id"],
-        source_kind=r["source_kind"],
-        source_filename=r["source_filename"],
-        source_s3_key=r["source_s3_key"],
-        source_url=src_url,
+        id=r["id"], batch_id=r["batch_id"],
+        source_kind=r["source_kind"], source_filename=r["source_filename"],
+        source_s3_key=r["source_s3_key"], source_url=src_url,
         source_photo_id=r["source_photo_id"],
+        source_group_id=r.get("source_group_id"),
         status=r["status"],
-        result_s3_key=r["result_s3_key"],
-        result_url=result_url,
-        log_tail=r.get("log_tail"),
-        error=r["error"],
-        tokens_used=r["tokens_used"],
-        elapsed_seconds=r["elapsed_seconds"],
-        started_at=r["started_at"],
-        finished_at=r["finished_at"],
+        result_s3_key=r["result_s3_key"], result_url=result_url,
+        log_tail=r.get("log_tail"), error=r["error"],
+        tokens_used=r["tokens_used"], elapsed_seconds=r["elapsed_seconds"],
+        started_at=r["started_at"], finished_at=r["finished_at"],
         transferred_to_photo_id=r["transferred_to_photo_id"],
         transferred_to_group_id=r.get("transferred_to_group_id"),
         suggestions=suggestions,
@@ -143,37 +154,43 @@ def _row_to_job(r: dict, transferred_photo_s3_key: str | None = None) -> StudioJ
 
 
 # ---------------------------------------------------------------------------
-# Target groups (driven by config-as-code in studio/groups.py)
+# Target groups + transfer rules (config exposed to FE)
 # ---------------------------------------------------------------------------
 
 
 @router.get("/target-groups", response_model=list[TargetGroup])
 async def list_target_groups() -> list[TargetGroup]:
-    """Groups that Studio can transfer results into. Order follows photo_groups.position."""
     target_ids = gconfig.studio_targets()
     if not target_ids:
         return []
     rows = await pool().fetch(
         """
-        SELECT id, name, position
-        FROM photo_groups
-        WHERE id = ANY($1::uuid[])
-        ORDER BY position ASC
+        SELECT id, name, position FROM photo_groups
+        WHERE id = ANY($1::uuid[]) ORDER BY position ASC
         """,
         target_ids,
     )
-    return [
-        TargetGroup(
-            id=r["id"],
-            name=r["name"],
-            defect_filter=gconfig.get(r["id"]).defect_filter,  # type: ignore[union-attr]
-        )
-        for r in rows
-    ]
+    out = []
+    for r in rows:
+        cfg = gconfig.get(r["id"])
+        if cfg is None:
+            continue
+        out.append(TargetGroup(
+            id=r["id"], name=r["name"],
+            owner_kind=cfg.owner_kind,
+            defect_filter=cfg.defect_filter,
+            accepts_defects=cfg.accepts_defects,
+        ))
+    return out
+
+
+@router.get("/transfer-rules", response_model=TransferRules)
+async def transfer_rules() -> TransferRules:
+    return TransferRules(**gconfig.transfer_rules_json())
 
 
 # ---------------------------------------------------------------------------
-# Backgrounds & Watermarks
+# Backgrounds / Watermarks
 # ---------------------------------------------------------------------------
 
 
@@ -266,13 +283,6 @@ async def create_batch(
     source_photo_ids: Annotated[str | None, Form()] = None,
     files: Annotated[list[UploadFile] | None, File()] = None,
 ) -> StudioBatch:
-    """Create a new batch.
-
-    `options` is a JSON object whose keys are OptionKey values and values are
-    booleans. `source_photo_ids` is a comma-separated list of UUIDs for photos
-    already in some collage. `files` is a list of fresh uploads. Where the
-    results land is decided after generation, on the results screen.
-    """
     try:
         opts_raw = json.loads(options)
         if not isinstance(opts_raw, dict):
@@ -301,7 +311,7 @@ async def create_batch(
     if not photo_ids and not file_list:
         raise HTTPException(400, "Batch needs at least one source (file or collage photo)")
 
-    upload_payloads: list[tuple[str, str, str, bytes]] = []  # (filename, mime, ext, bytes)
+    upload_payloads: list[tuple[str, str, str, bytes]] = []
     for f in file_list:
         raw = await f.read()
         if not raw:
@@ -334,7 +344,7 @@ async def create_batch(
                 if not ok:
                     raise HTTPException(404, "Watermark not found")
 
-            collage_photos: list[tuple[UUID, str, str | None]] = []  # (id, s3_key, filename)
+            collage_photos: list[tuple[UUID, str, str | None]] = []
             if photo_ids:
                 rows = await conn.fetch(
                     """
@@ -363,8 +373,8 @@ async def create_batch(
                    watermark_id, status, total)
                 VALUES ($1, $2, $3, $4, $5, $6, 'queued', $7)
                 RETURNING id, name, options_json, custom_prompt, background_id,
-                          watermark_id, status, total, done,
-                          failed, created_at, finished_at
+                          watermark_id, status, total, done, failed, created_at,
+                          finished_at
                 """,
                 batch_id, name, json.dumps(options_clean), custom_prompt,
                 background_id, watermark_id, total,
@@ -412,6 +422,25 @@ async def list_batches(limit: int = 50, offset: int = 0) -> list[StudioBatch]:
     return [_row_to_batch(dict(r)) for r in rows]
 
 
+# Joins for source_group_id (the group the source photo lives in) and
+# transferred_to_group_id (the group it landed in after transfer).
+_JOB_SELECT = """
+SELECT j.id, j.batch_id, j.source_kind, j.source_filename, j.source_s3_key,
+       j.source_photo_id, j.status, j.result_s3_key, j.error,
+       j.tokens_used, j.elapsed_seconds, j.started_at, j.finished_at,
+       j.transferred_to_photo_id, j.suggested_collages_json, j.created_at,
+       sp.collage_id AS source_collage_id,
+       sc.group_id AS source_group_id,
+       tp.s3_key AS transferred_photo_s3_key,
+       tc.group_id AS transferred_to_group_id
+FROM studio_jobs j
+LEFT JOIN photos sp ON sp.id = j.source_photo_id
+LEFT JOIN photo_collages sc ON sc.id = sp.collage_id
+LEFT JOIN photos tp ON tp.id = j.transferred_to_photo_id
+LEFT JOIN photo_collages tc ON tc.id = tp.collage_id
+"""
+
+
 @router.get("/batches/{batch_id}", response_model=StudioBatchDetail)
 async def get_batch(batch_id: UUID) -> StudioBatchDetail:
     async with pool().acquire() as conn:
@@ -426,20 +455,7 @@ async def get_batch(batch_id: UUID) -> StudioBatchDetail:
         if head is None:
             raise HTTPException(404, "Batch not found")
         job_rows = await conn.fetch(
-            """
-            SELECT j.id, j.batch_id, j.source_kind, j.source_filename, j.source_s3_key,
-                   j.source_photo_id, j.status, j.result_s3_key, j.error,
-                   j.tokens_used, j.elapsed_seconds, j.started_at, j.finished_at,
-                   j.transferred_to_photo_id, j.suggested_collages_json, j.created_at,
-                   p.s3_key AS transferred_photo_s3_key,
-                   p.collage_id AS transferred_collage_id,
-                   tc.group_id AS transferred_to_group_id
-            FROM studio_jobs j
-            LEFT JOIN photos p ON p.id = j.transferred_to_photo_id
-            LEFT JOIN photo_collages tc ON tc.id = p.collage_id
-            WHERE j.batch_id = $1
-            ORDER BY j.created_at ASC
-            """,
+            _JOB_SELECT + "WHERE j.batch_id = $1 ORDER BY j.created_at ASC",
             batch_id,
         )
         base = _row_to_batch(dict(head))
@@ -447,61 +463,52 @@ async def get_batch(batch_id: UUID) -> StudioBatchDetail:
         for r in job_rows:
             d = dict(r)
             transferred_key = d.pop("transferred_photo_s3_key", None)
-            d.pop("transferred_collage_id", None)
+            d.pop("source_collage_id", None)
             jobs.append(_row_to_job(d, transferred_key))
         return StudioBatchDetail(**base.model_dump(), jobs=jobs)
 
 
 @router.delete("/batches/{batch_id}", status_code=204)
 async def delete_batch(batch_id: UUID) -> None:
+    """Delete a batch + cascade jobs + nuke its files in the studio bucket.
+
+    `uploads/{batch}/*` is always orphaned by the time we reach here (sources
+    aren't moved on transfer). `results/{batch}/*` only contains files whose
+    jobs were not transferred — `move_studio_to_photos` already removed the
+    transferred ones during the transfer step.
+    """
     res = await pool().execute("DELETE FROM studio_batches WHERE id = $1", batch_id)
     if res.endswith(" 0"):
         raise HTTPException(404, "Batch not found")
-
-
-# ---------------------------------------------------------------------------
-# Job detail (for log_tail)
-# ---------------------------------------------------------------------------
+    delete_studio_prefix(f"uploads/{batch_id}/")
+    delete_studio_prefix(f"results/{batch_id}/")
 
 
 @router.get("/jobs/{job_id}", response_model=StudioJob)
 async def get_job(job_id: UUID) -> StudioJob:
     async with pool().acquire() as conn:
         row = await conn.fetchrow(
-            """
-            SELECT j.id, j.batch_id, j.source_kind, j.source_filename, j.source_s3_key,
-                   j.source_photo_id, j.status, j.result_s3_key, j.log_tail, j.error,
-                   j.tokens_used, j.elapsed_seconds, j.started_at, j.finished_at,
-                   j.transferred_to_photo_id, j.suggested_collages_json, j.created_at,
-                   p.s3_key AS transferred_photo_s3_key,
-                   tc.group_id AS transferred_to_group_id
-            FROM studio_jobs j
-            LEFT JOIN photos p ON p.id = j.transferred_to_photo_id
-            LEFT JOIN photo_collages tc ON tc.id = p.collage_id
-            WHERE j.id = $1
-            """,
+            _JOB_SELECT.replace(
+                "j.suggested_collages_json,",
+                "j.suggested_collages_json, j.log_tail,",
+            ) + "WHERE j.id = $1",
             job_id,
         )
         if row is None:
             raise HTTPException(404, "Job not found")
         d = dict(row)
         transferred_key = d.pop("transferred_photo_s3_key", None)
+        d.pop("source_collage_id", None)
         return _row_to_job(d, transferred_key)
 
 
 # ---------------------------------------------------------------------------
-# Transfer (single endpoint for one or many)
+# Transfer + lookup
 # ---------------------------------------------------------------------------
 
 
 @router.post("/batches/{batch_id}/transfers", response_model=list[Photo])
 async def transfer_batch(batch_id: UUID, body: TransferRequest) -> list[Photo]:
-    """Transfer one or more job results into target-group instance collages.
-
-    For each entry, ensure the (group_id, item_id) instance collage exists
-    (create on demand), then move the result file under it. One job may be
-    transferred at most once — re-attempts get HTTP 409.
-    """
     job_ids = [e.job_id for e in body.transfers]
     valid_rows = await pool().fetch(
         "SELECT id FROM studio_jobs WHERE batch_id = $1 AND id = ANY($2::uuid[])",
@@ -518,22 +525,44 @@ async def transfer_batch(batch_id: UUID, body: TransferRequest) -> list[Photo]:
     return out
 
 
-# ---------------------------------------------------------------------------
-# Lookup (manual fallback when filename wasn't recognized)
-# ---------------------------------------------------------------------------
-
-
-@router.get("/lookup", response_model=list[LookupItem])
+@router.get("/lookup/items", response_model=list[LookupItem])
 async def lookup_items(
     smart_part_id: str = Query(min_length=1),
     group_id: UUID = Query(...),
 ) -> list[LookupItem]:
+    """Manual lookup for instance targets: list items of `smart_part_id` that
+    pass the target group's `defect_filter`."""
     cfg = gconfig.get(group_id)
     if cfg is None or cfg.studio_role != "target":
         raise HTTPException(400, "group_id is not a Studio target group")
+    if cfg.owner_kind != "instance":
+        raise HTTPException(400, "this group is not item-based — use /lookup/smart")
     async with pool().acquire() as conn:
         rows = await items_for_part(smart_part_id, group_id, conn)
     return [LookupItem(**r) for r in rows]
+
+
+@router.get("/lookup/smart", response_model=LookupSmart)
+async def lookup_smart(
+    smart_part_id: str = Query(min_length=1),
+    group_id: UUID = Query(...),
+) -> LookupSmart:
+    """Manual lookup for smart_part targets: returns just the existing-collage-id
+    slot (or null if it would be created)."""
+    cfg = gconfig.get(group_id)
+    if cfg is None or cfg.studio_role != "target":
+        raise HTTPException(400, "group_id is not a Studio target group")
+    if cfg.owner_kind != "smart_part":
+        raise HTTPException(400, "this group is item-based — use /lookup/items")
+    # Validate smart_part exists in smart catalog.
+    async with pool().acquire() as conn:
+        ok = await conn.fetchval(
+            "SELECT 1 FROM smart_ext.parts WHERE id = $1", smart_part_id
+        )
+        if not ok:
+            raise HTTPException(404, f"smart_part_id '{smart_part_id}' not in smart catalog")
+        existing = await smart_collage_for_part(smart_part_id, group_id, conn)
+    return LookupSmart(smart_part_id=smart_part_id, existing_collage_id=existing)
 
 
 # ---------------------------------------------------------------------------
@@ -541,32 +570,83 @@ async def lookup_items(
 # ---------------------------------------------------------------------------
 
 
-async def _do_transfer(job_id: UUID, group_id: UUID, item_id: int) -> Photo:
+async def _do_transfer(job_id: UUID, group_id: UUID, item_id: int | None) -> Photo:
     cfg = gconfig.get(group_id)
     if cfg is None or cfg.studio_role != "target":
         raise HTTPException(400, "group_id is not a Studio target group")
 
-    owner_id = str(item_id)
-
-    # Validate item exists in uchet and matches the group's defect filter.
-    # status='in_stock' guard avoids transferring to sold/consumed exemplars.
     async with pool().acquire() as conn:
-        item = await conn.fetchrow(
-            "SELECT id, defect, status FROM uchet_ext.items WHERE id = $1",
-            item_id,
+        # Pull the job + source-group context we need for matrix gate.
+        ctx = await conn.fetchrow(
+            """
+            SELECT j.id, j.status, j.result_s3_key, j.result_size_bytes,
+                   j.transferred_to_photo_id, j.source_kind,
+                   sc.group_id AS source_group_id
+            FROM studio_jobs j
+            LEFT JOIN photos sp ON sp.id = j.source_photo_id
+            LEFT JOIN photo_collages sc ON sc.id = sp.collage_id
+            WHERE j.id = $1
+            """,
+            job_id,
         )
-        if item is None:
-            raise HTTPException(404, f"item {item_id} not found in parts_uchet")
-        if item["status"] != "in_stock":
-            raise HTTPException(400, f"item {item_id} status={item['status']!r}, not in_stock")
-        if cfg.defect_filter == "with" and not item["defect"]:
-            raise HTTPException(400, f"item {item_id} is not defective; group requires defect=true")
-        if cfg.defect_filter == "without" and item["defect"]:
-            raise HTTPException(400, f"item {item_id} is defective; group requires defect=false")
+        if ctx is None:
+            raise HTTPException(404, "Job not found")
+        if ctx["transferred_to_photo_id"] is not None:
+            raise HTTPException(409, "Job already transferred")
+        if ctx["status"] != "succeeded":
+            raise HTTPException(400, f"Job not succeeded ({ctx['status']})")
+        if ctx["result_s3_key"] is None:
+            raise HTTPException(400, "Job has no result image")
+
+        # Matrix check — uses source_group_id (None for fresh upload).
+        if not gconfig.is_transfer_allowed(ctx["source_group_id"], group_id):
+            raise HTTPException(
+                400,
+                "Transfer forbidden by source→target rules",
+            )
+
+        # Resolve owner_id depending on the target's owner_kind.
+        if cfg.owner_kind == "instance":
+            if item_id is None:
+                raise HTTPException(400, "item_id required for instance target")
+            item = await conn.fetchrow(
+                "SELECT id, defect, status, smart_part_id FROM uchet_ext.items WHERE id = $1",
+                item_id,
+            )
+            if item is None:
+                raise HTTPException(404, f"item {item_id} not found in parts_uchet")
+            if item["status"] != "in_stock":
+                raise HTTPException(400, f"item {item_id} status={item['status']!r}, not in_stock")
+            if cfg.defect_filter == "with" and not item["defect"]:
+                raise HTTPException(400, f"item {item_id} is not defective; group requires defect=true")
+            if cfg.defect_filter == "without" and item["defect"]:
+                raise HTTPException(400, f"item {item_id} is defective; group requires defect=false")
+            owner_id = str(item_id)
+        else:
+            # smart_part target: derive smart_part_id from job's source or its
+            # suggestion. We don't take it from the request — the matching/
+            # source already pinned it.
+            sp_row = await conn.fetchrow(
+                """
+                SELECT j.suggested_collages_json,
+                       sc.owner_kind AS src_owner_kind,
+                       sc.owner_id   AS src_owner_id
+                FROM studio_jobs j
+                LEFT JOIN photos sp ON sp.id = j.source_photo_id
+                LEFT JOIN photo_collages sc ON sc.id = sp.collage_id
+                WHERE j.id = $1
+                """,
+                job_id,
+            )
+            smart_part_id = await _resolve_smart_for_smart_target(conn, sp_row)
+            if smart_part_id is None:
+                raise HTTPException(
+                    400,
+                    "Cannot resolve smart_part for this job — manual flow required",
+                )
+            owner_id = smart_part_id
 
         async with conn.transaction():
-            # Lock on (group, item) keeps two concurrent transfers from racing
-            # to create the same instance collage.
             lock_key = f"{group_id}:{owner_id}"
             await conn.execute(
                 "SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))",
@@ -576,42 +656,35 @@ async def _do_transfer(job_id: UUID, group_id: UUID, item_id: int) -> Photo:
             collage = await conn.fetchrow(
                 """
                 SELECT id, group_id FROM photo_collages
-                WHERE group_id = $1 AND owner_kind = 'instance' AND owner_id = $2
+                WHERE group_id = $1 AND owner_kind = $2 AND owner_id = $3
                 """,
-                group_id, owner_id,
+                group_id, cfg.owner_kind, owner_id,
             )
             if collage is None:
                 collage = await conn.fetchrow(
                     """
                     INSERT INTO photo_collages (group_id, owner_kind, owner_id)
-                    VALUES ($1, 'instance', $2)
+                    VALUES ($1, $2, $3)
                     RETURNING id, group_id
                     """,
-                    group_id, owner_id,
+                    group_id, cfg.owner_kind, owner_id,
                 )
-
             collage_id = collage["id"]
 
+            # Re-fetch result_s3_key under the same connection (could have
+            # been nulled by a concurrent transfer attempt).
             job = await conn.fetchrow(
-                """
-                SELECT id, status, result_s3_key, result_size_bytes,
-                       transferred_to_photo_id
-                FROM studio_jobs WHERE id = $1
-                """,
+                "SELECT result_s3_key, result_size_bytes, transferred_to_photo_id "
+                "FROM studio_jobs WHERE id = $1",
                 job_id,
             )
-            if job is None:
-                raise HTTPException(404, "Job not found")
             if job["transferred_to_photo_id"] is not None:
                 raise HTTPException(409, "Job already transferred")
-            if job["status"] != "succeeded":
-                raise HTTPException(400, f"Job not succeeded ({job['status']})")
             if job["result_s3_key"] is None:
                 raise HTTPException(400, "Job has no result image")
 
             photo_id = uuid4()
             new_key = f"groups/{collage['group_id']}/collages/{collage_id}/{photo_id}.png"
-
             try:
                 move_studio_to_photos(job["result_s3_key"], new_key)
             except Exception as exc:
@@ -646,3 +719,32 @@ async def _do_transfer(job_id: UUID, group_id: UUID, item_id: int) -> Photo:
     photo_dict = dict(row)
     photo_dict["url"] = public_url(photo_dict["s3_key"])
     return Photo(**photo_dict)
+
+
+async def _resolve_smart_for_smart_target(conn, sp_row) -> str | None:
+    """Find the smart_part_id for a smart_part-target transfer.
+
+    Priority: source collage's owner (if collage_photo source), else the
+    suggestion stored on the job. Returns None if neither is available.
+    """
+    if sp_row is None:
+        return None
+    if sp_row["src_owner_kind"] == "smart_part":
+        return sp_row["src_owner_id"]
+    if sp_row["src_owner_kind"] == "instance":
+        try:
+            item_id = int(sp_row["src_owner_id"])
+        except ValueError:
+            return None
+        item = await conn.fetchrow(
+            "SELECT smart_part_id FROM uchet_ext.items WHERE id = $1",
+            item_id,
+        )
+        if item:
+            return item["smart_part_id"]
+    sug = sp_row["suggested_collages_json"]
+    if isinstance(sug, str):
+        sug = json.loads(sug)
+    if isinstance(sug, dict):
+        return sug.get("smart_part_id")
+    return None

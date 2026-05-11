@@ -103,7 +103,7 @@ async def claim_one(conn: asyncpg.Connection) -> dict | None:
             ORDER BY j.created_at ASC
             FOR UPDATE OF j SKIP LOCKED
             LIMIT 1
-            """
+            """,
         )
         if row is None:
             return None
@@ -273,9 +273,20 @@ async def run_one_job(job: dict, work_dir: Path, ad_pool: AdaptivePool) -> bool:
         await asyncio.to_thread(put_bytes, result_key, result_bytes, "image/png")
 
         suggestions: dict | None = None
-        if job["source_filename"]:
+        # Resolve source collage if this job came from a collage_photo source —
+        # the smart_part is inherited from the source collage's owner instead
+        # of guessed from the filename.
+        source_collage_id = None
+        if job["source_kind"] == "collage_photo" and job["source_photo_id"]:
             async with pool().acquire() as conn:
-                suggestions = await find_matches(job["source_filename"], conn)
+                source_collage_id = await conn.fetchval(
+                    "SELECT collage_id FROM photos WHERE id = $1",
+                    job["source_photo_id"],
+                )
+        async with pool().acquire() as conn:
+            suggestions = await find_matches(
+                job["source_filename"], source_collage_id, conn
+            )
 
         await succeed_job(
             job_id,
