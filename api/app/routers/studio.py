@@ -135,7 +135,7 @@ async def list_backgrounds() -> list[StudioAsset]:
         "SELECT id, name, s3_key, width, height, size_bytes, uploaded_at "
         "FROM studio_backgrounds WHERE deleted_at IS NULL ORDER BY uploaded_at DESC"
     )
-    return [_row_to_asset(dict(r), ASSET_KIND_BG) for r in rows]
+    return [_row_to_asset(dict(r)) for r in rows]
 
 
 @router.post("/backgrounds", response_model=StudioAsset, status_code=201)
@@ -154,7 +154,7 @@ async def list_watermarks() -> list[StudioAsset]:
         "SELECT id, name, s3_key, width, height, size_bytes, uploaded_at "
         "FROM studio_watermarks WHERE deleted_at IS NULL ORDER BY uploaded_at DESC"
     )
-    return [_row_to_asset(dict(r), ASSET_KIND_WM) for r in rows]
+    return [_row_to_asset(dict(r)) for r in rows]
 
 
 @router.post("/watermarks", response_model=StudioAsset, status_code=201)
