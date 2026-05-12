@@ -8,11 +8,11 @@ CREATE EXTENSION IF NOT EXISTS postgres_fdw;
 -- Drop the legacy stub schema if it was created earlier for local testing.
 DROP SCHEMA IF EXISTS smart_ext CASCADE;
 
--- Foreign server pointing at the real smart DB on 2.26.53.128:5402.
+-- Foreign server pointing at the real smart DB on 194.164.245.107:5402.
 DROP SERVER IF EXISTS smart_server CASCADE;
 CREATE SERVER smart_server
     FOREIGN DATA WRAPPER postgres_fdw
-    OPTIONS (host '2.26.53.128', port '5402', dbname 'smart');
+    OPTIONS (host '194.164.245.107', port '5402', dbname 'smart');
 
 -- Each local user that queries the foreign table needs a mapping. Both the
 -- API (which connects as `admin`) and ad-hoc psql sessions go through this.

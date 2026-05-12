@@ -6,11 +6,11 @@
 
 CREATE EXTENSION IF NOT EXISTS postgres_fdw;
 
--- Foreign server pointing at the real parts_uchet DB on 2.26.53.128:5403.
+-- Foreign server pointing at the real parts_uchet DB on 194.164.245.107:5403.
 DROP SERVER IF EXISTS uchet_server CASCADE;
 CREATE SERVER uchet_server
     FOREIGN DATA WRAPPER postgres_fdw
-    OPTIONS (host '2.26.53.128', port '5403', dbname 'parts_uchet');
+    OPTIONS (host '194.164.245.107', port '5403', dbname 'parts_uchet');
 
 CREATE USER MAPPING FOR admin
     SERVER uchet_server

@@ -12,7 +12,7 @@ gpt-image-2 на ChatGPT-подписке. Состоит из:
 1. **Авторизовать codex под ChatGPT Pro:**
 
    ```sh
-   ssh root@2.26.53.128
+   ssh root@194.164.245.107
    npm i -g @openai/codex     # если ещё не стоит
    codex login                # → выбрать "Sign in with ChatGPT", открыть URL в браузере
    ls -la /root/.codex/auth.json   # должен появиться (~4KB)
@@ -83,11 +83,11 @@ docker compose pull && docker compose up -d
 docker compose logs --tail=50 studio-worker
 
 # 2. проверить API
-curl -s http://2.26.53.128:3200/studio/backgrounds | jq
-curl -s http://2.26.53.128:3200/studio/batches | jq
+curl -s http://194.164.245.107:3200/studio/backgrounds | jq
+curl -s http://194.164.245.107:3200/studio/batches | jq
 
 # 3. фронт
-open http://2.26.53.128:3100/studio
+open http://194.164.245.107:3100/studio
 # → Studio в сайдбаре, страница откроется
 # → загрузить фон, загрузить файл, включить replace_bg, нажать Generate
 # → progress bar тикает, через ~2 мин — результат
