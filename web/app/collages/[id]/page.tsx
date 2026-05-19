@@ -1,11 +1,19 @@
 import Shell from "@/components/shell/Shell";
 import OwnerCard from "@/components/owners/OwnerCard";
+import DraftNoteEditor from "@/components/collages/DraftNoteEditor";
 import PhotosGrid from "@/components/photos/PhotosGrid";
 import Uploader from "@/components/upload/Uploader";
 import { api } from "@/lib/api";
+import bannerS from "@/components/collages/DraftBanner.module.css";
 
 interface Props {
   params: Promise<{ id: string }>;
+}
+
+function crumbLabel(note: string | null | undefined, max = 48): string {
+  const t = (note || "").trim();
+  if (!t) return "Черновик";
+  return t.length > max ? `${t.slice(0, max)}…` : t;
 }
 
 export default async function CollagePage({ params }: Props) {
@@ -15,6 +23,7 @@ export default async function CollagePage({ params }: Props) {
     api.collages.get(id),
   ]);
 
+  const isDraft = collage.owner_kind === "draft";
   const firstPhotoUrl =
     collage.photos.find((p) => p.state === "uploaded")?.url ?? null;
 
@@ -25,10 +34,23 @@ export default async function CollagePage({ params }: Props) {
       crumbs={[
         { label: "Photos" },
         { label: collage.group_name },
-        { label: collage.owner_id, here: true },
+        {
+          label: isDraft ? crumbLabel(collage.note) : collage.owner_id,
+          here: true,
+        },
       ]}
     >
-      <OwnerCard collage={collage} thumbUrl={firstPhotoUrl} />
+      {isDraft ? (
+        <>
+          <div className={bannerS.banner}>
+            <span className={bannerS.badge}>Черновик</span>
+            Не привязан к item в учёте. Комментарий — для ручной разводки после съёмки.
+          </div>
+          <DraftNoteEditor collageId={collage.id} initialNote={collage.note || ""} />
+        </>
+      ) : (
+        <OwnerCard collage={collage} thumbUrl={firstPhotoUrl} />
+      )}
 
       <div
         style={{
@@ -48,7 +70,12 @@ export default async function CollagePage({ params }: Props) {
         </div>
       </div>
 
-      <PhotosGrid collageId={collage.id} ownerId={collage.owner_id} photos={collage.photos} />
+      <PhotosGrid
+        collageId={collage.id}
+        ownerId={collage.owner_id}
+        photos={collage.photos}
+        hideStudio={isDraft}
+      />
       <Uploader collageId={collage.id} />
     </Shell>
   );

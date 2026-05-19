@@ -1,7 +1,9 @@
 import Shell from "@/components/shell/Shell";
 import CollageGrid from "@/components/collages/CollageGrid";
 import NewCollageButton from "@/components/collages/NewCollageButton";
+import NewDraftCollageButton from "@/components/collages/NewDraftCollageButton";
 import { api } from "@/lib/api";
+import { isDraftGroup } from "@/lib/draftGroups";
 import GroupSearch from "./GroupSearch";
 
 interface Props {
@@ -26,13 +28,16 @@ export default async function GroupPage({ params, searchParams }: Props) {
 
   const photosCount = allCollages.reduce((acc, c) => acc + c.photos_count, 0);
   const emptyCount = allCollages.filter((c) => c.photos_count === 0).length;
+  const draftMode = isDraftGroup(id);
 
   return (
     <Shell
       groups={groups}
       activeGroupId={id}
       crumbs={[{ label: "Photos" }, { label: active.name, here: true }]}
-      topbarRight={<NewCollageButton groupId={id} />}
+      topbarRight={
+        draftMode ? <NewDraftCollageButton groupId={id} /> : <NewCollageButton groupId={id} />
+      }
     >
       <h1 className="display display-md">{active.name}.</h1>
       {active.description && (
@@ -65,7 +70,7 @@ export default async function GroupPage({ params, searchParams }: Props) {
         </span>
       </div>
 
-      <GroupSearch initialQ={q} resultsCount={collages.length} />
+      <GroupSearch initialQ={q} resultsCount={collages.length} draftMode={draftMode} />
       {q && collages.length === 0 ? (
         <div style={{ marginTop: 32, color: "var(--text-muted)", fontSize: 14 }}>
           Ничего не найдено.

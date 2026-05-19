@@ -54,14 +54,20 @@ export default function CollageGrid({ collages, showGroup }: Props) {
     );
   }
 
+  function displayTitle(c: Collage): string {
+    if (c.owner_kind === "draft") return c.note || "Без комментария";
+    return c.owner_name || c.owner_id;
+  }
+
   async function onDelete(c: Collage, e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
     if (deleting) return;
+    const title = displayTitle(c);
     const what =
       c.photos_count > 0
-        ? `Удалить коллаж «${c.owner_name || c.owner_id}» вместе с ${c.photos_count} фото? Это нельзя отменить.`
-        : `Удалить коллаж «${c.owner_name || c.owner_id}»?`;
+        ? `Удалить коллаж «${title}» вместе с ${c.photos_count} фото? Это нельзя отменить.`
+        : `Удалить коллаж «${title}»?`;
     if (!confirm(what)) return;
     setDeleting(c.id);
     try {
@@ -77,7 +83,10 @@ export default function CollageGrid({ collages, showGroup }: Props) {
 
   return (
     <div className={s.grid}>
-      {collages.map((c) => (
+      {collages.map((c) => {
+        const isDraft = c.owner_kind === "draft";
+        const title = displayTitle(c);
+        return (
         <Link key={c.id} href={`/collages/${c.id}`} className={s.card}>
           <div className={s.thumb}>
             {c.first_photo_url ? (
@@ -87,6 +96,7 @@ export default function CollageGrid({ collages, showGroup }: Props) {
                 <PhotoIcon />
               </div>
             )}
+            {isDraft && <span className={s.draftBadge}>Черновик</span>}
             {showGroup && c.group_name && (
               <span className={s.groupBadge}>{c.group_name}</span>
             )}
@@ -102,12 +112,12 @@ export default function CollageGrid({ collages, showGroup }: Props) {
             </button>
           </div>
           <div className={s.meta}>
-            <div className={s.name}>
-              {c.owner_name || c.owner_id}
-            </div>
-            <div className={s.art}>
-              {c.owner_articles?.length ? c.owner_articles.join(" · ") : c.owner_id}
-            </div>
+            <div className={s.name}>{title}</div>
+            {!isDraft && (
+              <div className={s.art}>
+                {c.owner_articles?.length ? c.owner_articles.join(" · ") : c.owner_id}
+              </div>
+            )}
             <div className={s.foot}>
               {c.photos_count > 0 ? (
                 <span className={s.count}>
@@ -123,7 +133,8 @@ export default function CollageGrid({ collages, showGroup }: Props) {
             </div>
           </div>
         </Link>
-      ))}
+        );
+      })}
     </div>
   );
 }

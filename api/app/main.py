@@ -24,9 +24,12 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="photos_api", lifespan=lifespan)
 
+# Comma-separated WEB_ORIGIN — e.g. http://localhost:3000,http://localhost:3100
+_cors_origins = [o.strip() for o in settings.web_origin.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.web_origin],
+    allow_origins=_cors_origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],

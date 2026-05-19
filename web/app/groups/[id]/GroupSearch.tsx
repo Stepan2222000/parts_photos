@@ -7,11 +7,12 @@ import s from "./GroupSearch.module.css";
 interface Props {
   initialQ: string;
   resultsCount: number;
+  draftMode?: boolean;
 }
 
 const DEBOUNCE_MS = 250;
 
-export default function GroupSearch({ initialQ, resultsCount }: Props) {
+export default function GroupSearch({ initialQ, resultsCount, draftMode = false }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -45,7 +46,9 @@ export default function GroupSearch({ initialQ, resultsCount }: Props) {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Поиск по названию, smart-id или артикулу"
+          placeholder={
+            draftMode ? "Поиск по комментарию" : "Поиск по названию, smart-id или артикулу"
+          }
           className={s.input}
           type="search"
         />

@@ -4,15 +4,23 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      deploy_branch:
+        description: Branch to build images from and checkout on the server
+        required: true
+        default: main
+        type: string
 
 concurrency:
-  group: deploy-${{ github.ref }}
+  group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.deploy_branch || 'main' }}
   cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
   IMAGE_OWNER: stepan2222000
   PUBLIC_API_URL: http://194.164.245.107:3200
+  # push → main; manual run → chosen branch (temporary draft deploys)
+  DEPLOY_BRANCH: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_branch || 'main' }}
 
 jobs:
   build:
@@ -22,8 +30,11 @@ jobs:
       packages: write
     outputs:
       sha_tag: ${{ steps.meta.outputs.sha_tag }}
+      deploy_branch: ${{ env.DEPLOY_BRANCH }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.DEPLOY_BRANCH }}
 
       - name: Compute short SHA tag
         id: meta
@@ -76,18 +87,24 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    env:
+      DEPLOY_BRANCH: ${{ needs.build.outputs.deploy_branch }}
     steps:
       - name: SSH deploy on server
         uses: appleboy/ssh-action@v1
+        env:
+          DEPLOY_BRANCH: ${{ needs.build.outputs.deploy_branch }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: DEPLOY_BRANCH
           script: |
             set -euo pipefail
             cd /root/parts_photos_app
-            git fetch --quiet origin main
-            git reset --hard origin/main
+            echo "Deploying branch: ${DEPLOY_BRANCH}"
+            git fetch --quiet origin "${DEPLOY_BRANCH}"
+            git reset --hard "origin/${DEPLOY_BRANCH}"
             docker compose pull
             # Apply DB migrations on every deploy (idempotent — uses
             # CREATE … IF NOT EXISTS / ADD COLUMN IF NOT EXISTS).

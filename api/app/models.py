@@ -7,7 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
-OwnerKind = Literal["smart_part", "instance"]
+OwnerKind = Literal["smart_part", "instance", "draft"]
 
 
 class Group(BaseModel):
@@ -41,7 +41,12 @@ class GroupPatch(BaseModel):
 class CollageCreate(BaseModel):
     group_id: UUID
     owner_kind: OwnerKind
-    owner_id: str = Field(min_length=1, max_length=200)
+    owner_id: str | None = Field(default=None, min_length=1, max_length=200)
+    note: str | None = None
+
+
+class CollagePatch(BaseModel):
+    note: str = Field(min_length=1)
 
 
 class Collage(BaseModel):
@@ -49,6 +54,7 @@ class Collage(BaseModel):
     group_id: UUID
     owner_kind: OwnerKind
     owner_id: str
+    note: str | None = None
     created_at: datetime
     photos_count: int = 0
     first_photo_url: str | None = None
@@ -63,6 +69,7 @@ class CollageDetail(BaseModel):
     group_name: str
     owner_kind: OwnerKind
     owner_id: str
+    note: str | None = None
     owner_name: str | None = None
     owner_articles: list[str] = []
     photos: list["Photo"] = []

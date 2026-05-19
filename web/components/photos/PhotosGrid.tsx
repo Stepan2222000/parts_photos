@@ -74,6 +74,7 @@ function Tile({
   position,
   collageId,
   ownerId,
+  hideStudio,
   onDelete,
   onOpen,
 }: {
@@ -81,6 +82,7 @@ function Tile({
   position: number;
   collageId: string;
   ownerId: string;
+  hideStudio?: boolean;
   onDelete: (id: string) => void;
   onOpen: (photoId: string) => void;
 }) {
@@ -131,7 +133,7 @@ function Tile({
       ) : null}
       <span className={s.pos}>{String(position).padStart(2, "0")}</span>
       <div className={s.tileActions}>
-        {photo.state === "uploaded" && (
+        {photo.state === "uploaded" && !hideStudio && (
           <a
             href={`/studio?source_photo_id=${encodeURIComponent(photo.id)}&target_collage_id=${encodeURIComponent(collageId)}`}
             title="Upgrade в Studio"
@@ -189,9 +191,15 @@ interface Props {
   collageId: string;
   ownerId: string;
   photos: Photo[];
+  hideStudio?: boolean;
 }
 
-export default function PhotosGrid({ collageId, ownerId, photos: initialPhotos }: Props) {
+export default function PhotosGrid({
+  collageId,
+  ownerId,
+  photos: initialPhotos,
+  hideStudio = false,
+}: Props) {
   const router = useRouter();
   const dndId = useId();
   const [photos, setPhotos] = useState(initialPhotos);
@@ -271,6 +279,7 @@ export default function PhotosGrid({ collageId, ownerId, photos: initialPhotos }
                 position={i + 1}
                 collageId={collageId}
                 ownerId={ownerId}
+                hideStudio={hideStudio}
                 onDelete={onDelete}
                 onOpen={openLightbox}
               />

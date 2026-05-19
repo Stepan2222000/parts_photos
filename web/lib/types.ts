@@ -1,4 +1,4 @@
-export type OwnerKind = "smart_part" | "instance";
+export type OwnerKind = "smart_part" | "instance" | "draft";
 export type PhotoState = "pending" | "uploaded" | "failed" | "deleted";
 
 export interface Group {
@@ -18,6 +18,7 @@ export interface Collage {
   group_id: string;
   owner_kind: OwnerKind;
   owner_id: string;
+  note?: string | null;
   created_at: string;
   photos_count: number;
   first_photo_url: string | null;
@@ -46,6 +47,7 @@ export interface CollageDetail {
   group_name: string;
   owner_kind: OwnerKind;
   owner_id: string;
+  note?: string | null;
   owner_name: string | null;
   owner_articles: string[];
   photos: Photo[];

@@ -29,6 +29,20 @@
 }
 .empty svg { width: 28px; height: 28px; }
 
+.draftBadge {
+  position: absolute;
+  top: 8px; left: 8px;
+  padding: 3px 8px;
+  background: var(--brand-coral);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  z-index: 1;
+}
+
 .groupBadge {
   position: absolute;
   top: 8px; left: 8px;
