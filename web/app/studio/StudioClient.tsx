@@ -33,9 +33,10 @@ const DEFAULT_OPTIONS: StudioOptions = {
 };
 
 interface Props {
-  initialSourcePhotoId: string | null;
-  /** Optional collage to pull `initialSourcePhotoId` from. Quick-action URL
-   *  parameter — does NOT preselect a transfer target. */
+  /** Photo id(s) to pre-load as sources (1 = legacy ✨, many = bulk upgrade). */
+  initialSourcePhotoIds: string[];
+  /** Collage to pull the source photo(s) from. Quick-action URL parameter —
+   *  does NOT preselect a transfer target. */
   initialSourceCollageId: string | null;
   initialBatchId: string | null;
 }
@@ -79,7 +80,7 @@ function submitButtonLabel(submitting: boolean, missing: string[], n: number): s
 }
 
 export default function StudioClient({
-  initialSourcePhotoId,
+  initialSourcePhotoIds,
   initialSourceCollageId,
   initialBatchId,
 }: Props) {
@@ -89,6 +90,9 @@ export default function StudioClient({
   const [customPrompt, setCustomPrompt] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [collagePhotos, setCollagePhotos] = useState<CollagePickedPhoto[]>([]);
+  // Auto-derived from the source collage when arriving via a quick-action URL,
+  // so bulk batches are findable in history. null = let the user/back-end name it.
+  const [defaultBatchName, setDefaultBatchName] = useState<string | null>(null);
   const [backgrounds, setBackgrounds] = useState<StudioAsset[]>([]);
   const [watermarks, setWatermarks] = useState<StudioAsset[]>([]);
   const [bgId, setBgId] = useState<string | null>(null);
@@ -103,29 +107,32 @@ export default function StudioClient({
   // ── Load libraries + batches on mount, and pre-fill source if asked ───────
   useEffect(() => {
     void refreshAll();
-    // Quick-action из коллажа: на странице ?source_photo_id=X&target_collage_id=Y
-    // подтягиваем фото-источник, чтобы пользователь сразу видел превью.
-    // (target_collage_id здесь — это collage-источник для удобного fetch'а
-    // фотки; куда положить результат — выбирается уже после генерации.)
-    if (initialSourcePhotoId && initialSourceCollageId) {
+    // Quick-action из коллажа: ?source_photo_ids=a,b,c&from_collage=X — тянем
+    // выбранные фото-источники одним fetch'ем коллажа, чтобы пользователь сразу
+    // видел превью. (Коллаж здесь — источник фоток; куда положить результат
+    // выбирается уже после генерации.)
+    if (initialSourcePhotoIds.length > 0 && initialSourceCollageId) {
       (async () => {
         const c = await api.collages.get(initialSourceCollageId);
-        const p = c.photos.find((x) => x.id === initialSourcePhotoId);
-        if (!p) {
-          setError(
-            `Фото ${initialSourcePhotoId} не найдено в коллаже ${initialSourceCollageId}`,
-          );
-          return;
+        const want = new Set(initialSourcePhotoIds);
+        const picked: CollagePickedPhoto[] = [];
+        const found = new Set<string>();
+        for (const p of c.photos) {
+          if (want.has(p.id) && p.state === "uploaded") {
+            picked.push({ id: p.id, url: p.url, collageId: c.id, collageOwnerId: c.owner_id });
+            found.add(p.id);
+          }
         }
-        setCollagePhotos([
-          {
-            id: p.id,
-            url: p.url,
-            collageId: c.id,
-            collageOwnerId: c.owner_id,
-          },
-        ]);
-      })().catch((e) => setError(`Не удалось загрузить исходное фото: ${e}`));
+        setCollagePhotos(picked);
+
+        const ownerLabel = c.owner_kind === "instance" ? `#${c.owner_id}` : c.owner_id;
+        setDefaultBatchName(c.owner_name ? `${ownerLabel} · ${c.owner_name}` : ownerLabel);
+
+        const missing = initialSourcePhotoIds.filter((id) => !found.has(id));
+        if (missing.length) {
+          setError(`Не найдены или не загружены фото: ${missing.join(", ")}`);
+        }
+      })().catch((e) => setError(`Не удалось загрузить исходные фото: ${e}`));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -205,6 +212,7 @@ export default function StudioClient({
     try {
       const batch = await api.studio.createBatch({
         options,
+        name: defaultBatchName ?? undefined,
         customPrompt: customPrompt.trim() || undefined,
         backgroundId: bgId ?? undefined,
         watermarkId: wmId ?? undefined,

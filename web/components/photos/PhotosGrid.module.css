@@ -105,3 +105,51 @@
 }
 .btnGhost:hover { background: var(--hover); color: var(--text-strong); }
 .btnGhost svg { width: 14px; height: 14px; }
+.btnCoral:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── bulk select ───────────────────────────────────────────────────────── */
+.toolbar {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  margin-bottom: 14px;
+}
+
+.selectBar {
+  position: sticky; top: 56px; z-index: 4;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 10px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  box-shadow: var(--shadow-tile);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+@media (max-width: 800px) { .selectBar { top: 50px; } }
+.selectCount { font-size: 13.5px; font-weight: 500; color: var(--text-strong); }
+.selectBarBtns { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* tile states in select mode */
+.tile.selecting { cursor: pointer; }
+.tile.selecting img { cursor: pointer; }
+.tile.selected {
+  border-color: var(--brand-coral);
+  box-shadow: 0 0 0 2px var(--brand-coral), inset 0 0 0 9999px rgba(204,120,92,0.12);
+}
+.tile.unselectable { opacity: 0.4; cursor: not-allowed; }
+
+.selectMark {
+  position: absolute; right: 8px; top: 8px;
+  width: 24px; height: 24px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px;
+  background: var(--photo-overlay);
+  border: 2px solid #fff;
+  color: #fff;
+}
+.selectMark svg { width: 14px; height: 14px; }
+.selectMarkOn {
+  background: var(--brand-coral);
+  border-color: #fff;
+}

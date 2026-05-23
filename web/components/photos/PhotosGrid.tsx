@@ -51,6 +51,14 @@ function CheckIcon() {
     </svg>
   );
 }
+function SelectIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="3" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  );
+}
 function DownloadIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -74,6 +82,9 @@ function Tile({
   position,
   collageId,
   ownerId,
+  selectMode,
+  isSelected,
+  onToggleSelect,
   onDelete,
   onOpen,
 }: {
@@ -81,18 +92,30 @@ function Tile({
   position: number;
   collageId: string;
   ownerId: string;
+  selectMode: boolean;
+  isSelected: boolean;
+  onToggleSelect: (id: string) => void;
   onDelete: (id: string) => void;
   onOpen: (photoId: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: photo.id });
+    useSortable({ id: photo.id, disabled: selectMode });
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
   };
 
-  const cn = [s.tile, isDragging ? s.dragging : "", photo.state === "failed" ? s.failed : ""]
+  const selectable = photo.state === "uploaded";
+
+  const cn = [
+    s.tile,
+    isDragging ? s.dragging : "",
+    photo.state === "failed" ? s.failed : "",
+    selectMode ? s.selecting : "",
+    isSelected ? s.selected : "",
+    selectMode && !selectable ? s.unselectable : "",
+  ]
     .filter(Boolean)
     .join(" ");
 
@@ -117,69 +140,89 @@ function Tile({
   }
 
   return (
-    <div ref={setNodeRef} style={style} className={cn} {...attributes} {...listeners}>
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn}
+      {...attributes}
+      {...listeners}
+      onClick={selectMode && selectable ? () => onToggleSelect(photo.id) : undefined}
+    >
       {photo.state === "uploaded" ? (
         <img
           src={photo.url}
           alt=""
           loading="lazy"
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpen(photo.id);
-          }}
+          onClick={
+            selectMode
+              ? undefined
+              : (e) => {
+                  e.stopPropagation();
+                  onOpen(photo.id);
+                }
+          }
         />
       ) : null}
       <span className={s.pos}>{String(position).padStart(2, "0")}</span>
-      <div className={s.tileActions}>
-        {photo.state === "uploaded" && (
-          <a
-            href={`/studio?source_photo_id=${encodeURIComponent(photo.id)}&target_collage_id=${encodeURIComponent(collageId)}`}
-            title="Upgrade в Studio"
-            onClick={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            <SparklesIcon />
-          </a>
-        )}
-        {photo.state === "uploaded" && (
+
+      {selectMode && selectable && (
+        <span className={`${s.selectMark} ${isSelected ? s.selectMarkOn : ""}`}>
+          {isSelected && <CheckIcon />}
+        </span>
+      )}
+
+      {!selectMode && (
+        <div className={s.tileActions}>
+          {photo.state === "uploaded" && (
+            <a
+              href={`/studio?source_photo_id=${encodeURIComponent(photo.id)}&from_collage=${encodeURIComponent(collageId)}`}
+              title="Upgrade в Studio"
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <SparklesIcon />
+            </a>
+          )}
+          {photo.state === "uploaded" && (
+            <button
+              type="button"
+              title={copied ? "Скопировано" : "Скопировать изображение"}
+              onClick={(e) => {
+                e.stopPropagation();
+                onCopyClick();
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              {copied ? <CheckIcon /> : <CopyIcon />}
+            </button>
+          )}
+          {photo.state === "uploaded" && (
+            <button
+              type="button"
+              title="Скачать"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDownloadClick();
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <DownloadIcon />
+            </button>
+          )}
           <button
             type="button"
-            title={copied ? "Скопировано" : "Скопировать изображение"}
+            className={s.danger}
+            title="Delete"
             onClick={(e) => {
               e.stopPropagation();
-              onCopyClick();
+              onDelete(photo.id);
             }}
             onPointerDown={(e) => e.stopPropagation()}
           >
-            {copied ? <CheckIcon /> : <CopyIcon />}
+            <TrashIcon />
           </button>
-        )}
-        {photo.state === "uploaded" && (
-          <button
-            type="button"
-            title="Скачать"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDownloadClick();
-            }}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            <DownloadIcon />
-          </button>
-        )}
-        <button
-          type="button"
-          className={s.danger}
-          title="Delete"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete(photo.id);
-          }}
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          <TrashIcon />
-        </button>
-      </div>
+        </div>
+      )}
       {photo.state === "failed" && <span className={s.failedMark}>failed</span>}
     </div>
   );
@@ -196,9 +239,20 @@ export default function PhotosGrid({ collageId, ownerId, photos: initialPhotos }
   const dndId = useId();
   const [photos, setPhotos] = useState(initialPhotos);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setPhotos(initialPhotos);
+    // Drop any selected ids that no longer exist / are no longer uploaded.
+    setSelected((prev) => {
+      if (prev.size === 0) return prev;
+      const live = new Set(
+        initialPhotos.filter((p) => p.state === "uploaded").map((p) => p.id),
+      );
+      const next = new Set([...prev].filter((id) => live.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
   }, [initialPhotos]);
 
   const sensors = useSensors(
@@ -259,8 +313,85 @@ export default function PhotosGrid({ collageId, ownerId, photos: initialPhotos }
     if (i >= 0) setLightboxIndex(i);
   }
 
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function exitSelect() {
+    setSelectMode(false);
+    setSelected(new Set());
+  }
+
+  function goToStudio(ids: string[]) {
+    const unique = Array.from(new Set(ids));
+    if (unique.length === 0) return;
+    if (
+      unique.length > 20 &&
+      !confirm(`Выбрано ${unique.length} фото — отправить все в Studio одним батчем?`)
+    ) {
+      return;
+    }
+    const qs =
+      `source_photo_ids=${unique.map(encodeURIComponent).join(",")}` +
+      `&from_collage=${encodeURIComponent(collageId)}`;
+    router.push(`/studio?${qs}`);
+  }
+
+  const allSelected = uploaded.length > 0 && selected.size === uploaded.length;
+
   return (
     <>
+      {selectMode ? (
+        <div className={s.selectBar}>
+          <span className={s.selectCount}>Выбрано {selected.size}</span>
+          <div className={s.selectBarBtns}>
+            <button
+              type="button"
+              className={s.btnGhost}
+              onClick={() =>
+                setSelected(allSelected ? new Set() : new Set(uploaded.map((p) => p.id)))
+              }
+            >
+              {allSelected ? "Снять все" : "Выбрать все"}
+            </button>
+            <button type="button" className={s.btnGhost} onClick={exitSelect}>
+              Отмена
+            </button>
+            <button
+              type="button"
+              className={s.btnCoral}
+              disabled={selected.size === 0}
+              onClick={() => goToStudio([...selected])}
+            >
+              <SparklesIcon />
+              Апгрейдить ({selected.size}) →
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className={s.toolbar}>
+          <button type="button" className={s.btnGhost} onClick={() => setSelectMode(true)}>
+            <SelectIcon />
+            Выбрать
+          </button>
+          {uploaded.length > 0 && (
+            <button
+              type="button"
+              className={s.btnCoral}
+              onClick={() => goToStudio(uploaded.map((p) => p.id))}
+            >
+              <SparklesIcon />
+              Апгрейдить весь коллаж
+            </button>
+          )}
+        </div>
+      )}
+
       <DndContext id={dndId} sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={photos.map((p) => p.id)} strategy={rectSortingStrategy}>
           <div className={s.grid}>
@@ -271,6 +402,9 @@ export default function PhotosGrid({ collageId, ownerId, photos: initialPhotos }
                 position={i + 1}
                 collageId={collageId}
                 ownerId={ownerId}
+                selectMode={selectMode}
+                isSelected={selected.has(p.id)}
+                onToggleSelect={toggleSelect}
                 onDelete={onDelete}
                 onOpen={openLightbox}
               />
