@@ -8,6 +8,7 @@ grows by one after 50 successes in a row.
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import logging
 import os
@@ -18,9 +19,11 @@ from pathlib import Path
 from uuid import UUID
 
 import asyncpg
+from openai import AsyncOpenAI, RateLimitError
+from PIL import Image
 
-from studio_core import build_prompt, run_codex
-from studio_core.codex_runner import GENERATED_DIR, CodexError
+from studio_core import build_prompt, run_codex, size_for
+from studio_core.codex_runner import CodexError
 from studio_core.options import OptionKey
 
 from ..config import settings
@@ -31,9 +34,20 @@ from .storage import fetch_to, put_bytes, studio_bucket
 logger = logging.getLogger("studio.worker")
 
 POLL_INTERVAL_SECONDS = 2.0
-LOG_TAIL_FLUSH_SECONDS = 3.0
 SUCCESSES_BEFORE_GROW = 50
 RATE_LIMIT_BACKOFF_SECONDS = 30
+
+
+def _strip_c2pa(png: bytes) -> bytes:
+    """Re-encode the result PNG through Pillow, dropping the `caBX` chunk that
+    gpt-image embeds with C2PA "AI-generated" content credentials. Lossless for
+    PNG; also shrinks the file."""
+    with Image.open(io.BytesIO(png)) as im:
+        if im.mode not in ("RGB", "RGBA"):
+            im = im.convert("RGB")
+        out = io.BytesIO()
+        im.save(out, format="PNG", optimize=True)
+        return out.getvalue()
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +204,9 @@ async def _resolve_asset_keys(
     )
 
 
-async def run_one_job(job: dict, work_dir: Path, ad_pool: AdaptivePool) -> bool:
+async def run_one_job(
+    job: dict, work_dir: Path, ad_pool: AdaptivePool, client: AsyncOpenAI
+) -> bool:
     """Run a single job. Returns True on success, False on failure."""
     job_id: UUID = job["id"]
     options = job["options_json"] or {}
@@ -204,7 +220,6 @@ async def run_one_job(job: dict, work_dir: Path, ad_pool: AdaptivePool) -> bool:
 
     job_dir = work_dir / str(job_id)
     job_dir.mkdir(parents=True, exist_ok=True)
-    sess_dir_to_clean: Path | None = None
     try:
         bg_key, wm_key = await _resolve_asset_keys(
             background_id if has_bg else None,
@@ -245,30 +260,22 @@ async def run_one_job(job: dict, work_dir: Path, ad_pool: AdaptivePool) -> bool:
             custom_prompt=job["custom_prompt"],
         )
 
-        last_flush = {"text": "", "ts": 0.0}
-
-        async def progress(tail: str) -> None:
-            now = asyncio.get_event_loop().time()
-            if tail == last_flush["text"]: return  # no-op: same content
-            if now - last_flush["ts"] < LOG_TAIL_FLUSH_SECONDS: return
-            last_flush["text"] = tail
-            last_flush["ts"] = now
-            try:
-                await pool().execute(
-                    "UPDATE studio_jobs SET log_tail = $2 WHERE id = $1",
-                    job_id, tail[:8000],
-                )
-            except Exception:
-                logger.exception("failed to flush log tail for job %s", job_id)
+        # Output size follows the source orientation (square/portrait/landscape).
+        with Image.open(src_path) as src_img:
+            size = size_for(*src_img.size)
 
         result = await run_codex(
-            prompt, refs,
-            log_callback=progress,
-            timeout_seconds=settings.studio_codex_timeout_seconds,
+            client,
+            prompt,
+            refs,
+            model=settings.studio_image_model,
+            size=size,
+            quality=settings.studio_image_quality,
+            timeout_seconds=settings.studio_image_timeout_seconds,
         )
-        sess_dir_to_clean = GENERATED_DIR / result.session_id
 
-        result_bytes = result.image_path.read_bytes()
+        # Strip the embedded C2PA "AI-generated" credentials before storing.
+        result_bytes = await asyncio.to_thread(_strip_c2pa, result.image)
         result_key = f"results/{job['batch_id']}/{job_id}.png"
         await asyncio.to_thread(put_bytes, result_key, result_bytes, "image/png")
 
@@ -300,10 +307,12 @@ async def run_one_job(job: dict, work_dir: Path, ad_pool: AdaptivePool) -> bool:
         await ad_pool.report_success()
         return True
 
+    except RateLimitError as e:
+        await ad_pool.report_rate_limit()
+        await asyncio.sleep(RATE_LIMIT_BACKOFF_SECONDS)
+        await fail_job(job_id, f"rate limited: {e}")
+        return False
     except CodexError as e:
-        if e.rate_limited:
-            await ad_pool.report_rate_limit()
-            await asyncio.sleep(RATE_LIMIT_BACKOFF_SECONDS)
         await fail_job(job_id, str(e), e.log_tail)
         return False
     except Exception as e:
@@ -312,10 +321,6 @@ async def run_one_job(job: dict, work_dir: Path, ad_pool: AdaptivePool) -> bool:
         return False
     finally:
         shutil.rmtree(job_dir, ignore_errors=True)
-        # codex leaves the generated PNG in ~/.codex/generated_images/<sess>/;
-        # without cleanup that dir grows unbounded.
-        if sess_dir_to_clean is not None:
-            shutil.rmtree(sess_dir_to_clean, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------
@@ -327,6 +332,13 @@ async def main_loop() -> None:
     await init_pool()
     work_root = Path(tempfile.mkdtemp(prefix="studio_worker_"))
     ad_pool = AdaptivePool(settings.studio_min_workers, settings.studio_max_workers)
+    # One client per process; retries disabled so the adaptive pool is the sole
+    # rate-limit authority (it scales concurrency down on 429).
+    client = AsyncOpenAI(
+        base_url=settings.studio_openai_base_url,
+        api_key=settings.studio_openai_api_key,
+        max_retries=0,
+    )
     logger.info(
         "studio worker up: bucket=%s concurrency=%d (range %d..%d) work_root=%s",
         studio_bucket(),
@@ -361,7 +373,7 @@ async def main_loop() -> None:
                 if job is None:
                     break
                 await ad_pool.acquire()
-                t = asyncio.create_task(_wrap_job(job, work_root, ad_pool))
+                t = asyncio.create_task(_wrap_job(job, work_root, ad_pool, client))
                 in_flight.add(t)
                 t.add_done_callback(in_flight.discard)
                 launched_any = True
@@ -376,14 +388,17 @@ async def main_loop() -> None:
             logger.info("waiting for %d in-flight jobs to finish...", len(in_flight))
             await asyncio.gather(*in_flight, return_exceptions=True)
     finally:
+        await client.close()
         await close_pool()
         shutil.rmtree(work_root, ignore_errors=True)
         logger.info("studio worker stopped")
 
 
-async def _wrap_job(job: dict, work_root: Path, ad_pool: AdaptivePool) -> None:
+async def _wrap_job(
+    job: dict, work_root: Path, ad_pool: AdaptivePool, client: AsyncOpenAI
+) -> None:
     try:
-        await run_one_job(job, work_root, ad_pool)
+        await run_one_job(job, work_root, ad_pool, client)
     finally:
         await ad_pool.release()
 

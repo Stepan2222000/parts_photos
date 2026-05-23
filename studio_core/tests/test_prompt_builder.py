@@ -139,9 +139,10 @@ def test_unknown_option_keys_dropped() -> None:
     assert "Дополнительные подсказки по качеству" in p
 
 
-def test_aspect_ratio_instruction_present() -> None:
+def test_aspect_ratio_set_externally() -> None:
+    # Size/aspect ratio are now set via the API request, not dictated in the
+    # prompt — the prompt must not pin specific pixel dimensions.
     p = build_prompt(defaults())
-    assert "соотношение сторон по Изображению 1" in p
-    assert "1024x1024" in p
-    assert "1024x1536" in p
-    assert "1536x1024" in p
+    assert "соотношение сторон результата задаются извне" in p
+    assert "1024x1536" not in p
+    assert "1536x1024" not in p

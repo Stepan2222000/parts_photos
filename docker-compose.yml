@@ -38,12 +38,11 @@ services:
       STUDIO_MIN_WORKERS: "2"
       STUDIO_MAX_WORKERS: "10"
       STUDIO_LOG_LEVEL: INFO
-      HOME: /root
-    volumes:
-      # Run `codex login` once on the host as root: that creates
-      # /root/.codex/auth.json with the ChatGPT subscription token. Mounted RW
-      # because codex periodically refreshes the token.
-      - /root/.codex:/root/.codex
+      # Image-edit backend (OpenAI-compatible /images/edits endpoint).
+      STUDIO_OPENAI_BASE_URL: http://194.164.245.107:8317/v1
+      STUDIO_OPENAI_API_KEY: local-gpt55
+      STUDIO_IMAGE_MODEL: gpt-image-2
+      STUDIO_IMAGE_QUALITY: auto
     networks:
       - db_default
     depends_on:

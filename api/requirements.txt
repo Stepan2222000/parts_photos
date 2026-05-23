@@ -7,3 +7,4 @@ pillow-heif>=0.21
 pydantic>=2.13
 pydantic-settings>=2.7
 python-multipart>=0.0.20
+openai>=2

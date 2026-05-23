@@ -22,7 +22,13 @@ class Settings(BaseSettings):
     studio_max_workers: int = 10
     studio_min_workers: int = 2
     studio_max_source_bytes: int = 25 * 1024 * 1024  # gpt-image-2 hard limit
-    studio_codex_timeout_seconds: int = 15 * 60
+    studio_image_timeout_seconds: int = 15 * 60
+
+    # Studio image-edit backend (OpenAI-compatible /images/edits endpoint)
+    studio_openai_base_url: str = "https://api.openai.com/v1"
+    studio_openai_api_key: str = ""
+    studio_image_model: str = "gpt-image-2"
+    studio_image_quality: str = "auto"  # advisory; backend may not honor it
 
 
 settings = Settings()

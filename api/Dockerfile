@@ -1,17 +1,7 @@
 FROM python:3.13-slim
 
-# The codex CLI is required by the studio worker image (the same Dockerfile
-# is used for both api and worker). Node is needed because codex ships as an
-# npm package. The api itself does not invoke codex but installing it here
-# keeps a single image for both services.
-RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
- && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
- && apt-get install -y --no-install-recommends nodejs \
- && npm install -g @openai/codex \
- && apt-get clean \
- && rm -rf /var/lib/apt/lists/*
-
+# Image generation runs through the OpenAI SDK against an OpenAI-compatible
+# /images/edits endpoint (see app/studio/worker.py) — no external CLI needed.
 WORKDIR /app
 
 ENV PYTHONUNBUFFERED=1 \
