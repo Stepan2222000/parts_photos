@@ -8,9 +8,73 @@ from fastapi import APIRouter, HTTPException, Query
 from ..db import pool
 from ..minio_client import public_url
 from ..models import Collage, CollageCreate, CollageDetail, Photo
+from ..studio import groups as gconfig
 from .owners import validate_owner_exists
 
 router = APIRouter(tags=["collages"])
+
+
+async def _instance_owner_meta(owner_ids: list[str]) -> dict[str, dict]:
+    """Resolve display meta for instance owners (item ids as text).
+
+    Two batched FDW queries — items then parts — stitched in Python. We never
+    join `uchet_ext.items` and `smart_ext.parts` in one SQL (different foreign
+    servers → no join pushdown). Returns {owner_id: {name, articles, defect,
+    defect_note}}.
+    """
+    int_ids: list[int] = []
+    for oid in owner_ids:
+        try:
+            int_ids.append(int(oid))
+        except (TypeError, ValueError):
+            continue
+    if not int_ids:
+        return {}
+
+    item_rows = await pool().fetch(
+        "SELECT id, smart_part_id, defect, defect_note "
+        "FROM uchet_ext.items WHERE id = ANY($1::int[])",
+        int_ids,
+    )
+    smart_ids = list({r["smart_part_id"] for r in item_rows if r["smart_part_id"]})
+    parts: dict[str, dict] = {}
+    if smart_ids:
+        part_rows = await pool().fetch(
+            "SELECT id, name, articles FROM smart_ext.parts WHERE id = ANY($1::text[])",
+            smart_ids,
+        )
+        parts = {
+            r["id"]: {"name": r["name"], "articles": list(r["articles"] or [])}
+            for r in part_rows
+        }
+    out: dict[str, dict] = {}
+    for r in item_rows:
+        p = parts.get(r["smart_part_id"], {})
+        out[str(r["id"])] = {
+            "name": p.get("name"),
+            "articles": p.get("articles", []),
+            "defect": r["defect"],
+            "defect_note": r["defect_note"],
+        }
+    return out
+
+
+async def _enrich_instances(collages: list[Collage]) -> None:
+    """Fill name/articles/defect for instance collages in place."""
+    inst_ids = [c.owner_id for c in collages if c.owner_kind == "instance"]
+    if not inst_ids:
+        return
+    meta = await _instance_owner_meta(inst_ids)
+    for c in collages:
+        if c.owner_kind != "instance":
+            continue
+        m = meta.get(c.owner_id)
+        if not m:
+            continue
+        c.owner_name = m["name"]
+        c.owner_articles = m["articles"]
+        c.owner_defect = m["defect"]
+        c.owner_defect_note = m["defect_note"]
 
 Filter = Literal["all", "empty", "few"]
 Sort = Literal["updated", "count", "owner"]
@@ -81,7 +145,7 @@ async def _query_collages(
     """
     rows = await pool().fetch(sql, *params)
 
-    return [
+    collages = [
         Collage(
             id=r["id"],
             group_id=r["group_id"],
@@ -96,6 +160,8 @@ async def _query_collages(
         )
         for r in rows
     ]
+    await _enrich_instances(collages)
+    return collages
 
 
 @router.get("/groups/{group_id}/collages", response_model=list[Collage])
@@ -122,7 +188,19 @@ async def search_collages(
 
 @router.post("/collages", response_model=Collage, status_code=201)
 async def create_collage(payload: CollageCreate) -> Collage:
-    await validate_owner_exists(payload.owner_kind, payload.owner_id)
+    # Enforce the group's configured owner_kind — no silent fallback. This is
+    # what stops smart_part collages from landing in instance groups.
+    cfg = gconfig.get(payload.group_id)
+    if cfg is None or cfg.studio_role == "none":
+        raise HTTPException(422, "group is not configured for collage creation")
+    if payload.owner_kind != cfg.owner_kind:
+        raise HTTPException(
+            422,
+            f"group expects owner_kind={cfg.owner_kind!r}, "
+            f"got {payload.owner_kind!r}",
+        )
+
+    await validate_owner_exists(payload.owner_kind, payload.owner_id, payload.group_id)
 
     try:
         row = await pool().fetchrow(
@@ -176,7 +254,7 @@ async def get_collage(collage_id: UUID) -> CollageDetail:
     photos = [
         Photo(**dict(r), url=public_url(r["s3_key"])) for r in photo_rows
     ]
-    return CollageDetail(
+    detail = CollageDetail(
         id=head["id"],
         group_id=head["group_id"],
         group_name=head["group_name"],
@@ -186,6 +264,15 @@ async def get_collage(collage_id: UUID) -> CollageDetail:
         owner_articles=list(head["owner_articles"] or []),
         photos=photos,
     )
+    if detail.owner_kind == "instance":
+        meta = await _instance_owner_meta([detail.owner_id])
+        m = meta.get(detail.owner_id)
+        if m:
+            detail.owner_name = m["name"]
+            detail.owner_articles = m["articles"]
+            detail.owner_defect = m["defect"]
+            detail.owner_defect_note = m["defect_note"]
+    return detail
 
 
 @router.delete("/collages/{collage_id}", status_code=204)

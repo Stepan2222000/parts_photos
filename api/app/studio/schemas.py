@@ -107,6 +107,29 @@ class LookupItem(BaseModel):
     existing_collage_id: UUID | None = None
 
 
+class ItemSearchResult(BaseModel):
+    """One candidate physical item for the manual instance-collage picker."""
+    item_id: int
+    smart_part_id: str
+    smart_part_name: str | None = None
+    article: str | None = None       # best-matching article, for the label
+    defect: bool
+    defect_note: str | None = None
+    status: str
+    in_stock: bool
+    passes_filter: bool              # matches the group's defect_filter
+    selectable: bool                 # in_stock AND passes_filter
+    block_reason: str | None = None  # why it can't be picked (if !selectable)
+    existing_collage_id: UUID | None = None
+
+
+class ItemSearchResponse(BaseModel):
+    # parts_matched lets the UI say "part found, but no eligible items" instead
+    # of a bare "nothing found".
+    parts_matched: int
+    results: list[ItemSearchResult] = []
+
+
 class LookupSmart(BaseModel):
     """Smart_part target: returns the (single) existing-collage-id slot."""
     smart_part_id: str

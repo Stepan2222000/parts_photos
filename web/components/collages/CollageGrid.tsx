@@ -102,8 +102,14 @@ export default function CollageGrid({ collages, showGroup }: Props) {
             </button>
           </div>
           <div className={s.meta}>
+            {c.owner_kind === "instance" && (
+              <div className={s.kicker}>
+                <span className={s.itemBadge}>#{c.owner_id}</span>
+                {c.owner_defect && <span className={s.defectChip}>дефект</span>}
+              </div>
+            )}
             <div className={s.name}>
-              {c.owner_name || c.owner_id}
+              {c.owner_name || (c.owner_kind === "instance" ? "Экземпляр" : c.owner_id)}
             </div>
             <div className={s.art}>
               {c.owner_articles?.length ? c.owner_articles.join(" · ") : c.owner_id}

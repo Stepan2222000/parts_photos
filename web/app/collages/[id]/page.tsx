@@ -25,7 +25,13 @@ export default async function CollagePage({ params }: Props) {
       crumbs={[
         { label: "Photos" },
         { label: collage.group_name },
-        { label: collage.owner_id, here: true },
+        {
+          label:
+            collage.owner_kind === "instance"
+              ? `#${collage.owner_id}`
+              : collage.owner_id,
+          here: true,
+        },
       ]}
     >
       <OwnerCard collage={collage} thumbUrl={firstPhotoUrl} />

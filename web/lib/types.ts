@@ -1,4 +1,5 @@
 export type OwnerKind = "smart_part" | "instance";
+export type DefectFilter = "with" | "without" | "any";
 export type PhotoState = "pending" | "uploaded" | "failed" | "deleted";
 
 export interface Group {
@@ -11,6 +12,10 @@ export interface Group {
   updated_at: string;
   collages_count: number;
   photos_count: number;
+  // null when the group has no manual creation mode (not configured, or
+  // studio_role=none like "Поступления").
+  owner_kind: OwnerKind | null;
+  defect_filter: DefectFilter | null;
 }
 
 export interface Collage {
@@ -25,6 +30,8 @@ export interface Collage {
   owner_name?: string | null;
   owner_articles?: string[];
   group_name?: string | null;
+  owner_defect?: boolean | null;
+  owner_defect_note?: string | null;
 }
 
 export interface Photo {
@@ -48,7 +55,29 @@ export interface CollageDetail {
   owner_id: string;
   owner_name: string | null;
   owner_articles: string[];
+  owner_defect?: boolean | null;
+  owner_defect_note?: string | null;
   photos: Photo[];
+}
+
+export interface ItemSearchResult {
+  item_id: number;
+  smart_part_id: string;
+  smart_part_name: string | null;
+  article: string | null;
+  defect: boolean;
+  defect_note: string | null;
+  status: string;
+  in_stock: boolean;
+  passes_filter: boolean;
+  selectable: boolean;
+  block_reason: string | null;
+  existing_collage_id: string | null;
+}
+
+export interface ItemSearchResponse {
+  parts_matched: number;
+  results: ItemSearchResult[];
 }
 
 export interface OwnerSearchResult {

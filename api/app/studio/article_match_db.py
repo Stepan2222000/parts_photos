@@ -244,3 +244,175 @@ async def smart_collage_for_part(
     collage id (str) or None if it would have to be created."""
     rows = await conn.fetch(_SMART_COLLAGES, smart_part_id, [group_id])
     return str(rows[0]["id"]) if rows else None
+
+
+# ── Unified item search for the manual instance-collage picker ───────────────
+
+_PARTS_BY_TEXT = """
+SELECT id, name, articles
+FROM smart_ext.parts
+WHERE id ILIKE $1
+   OR name ILIKE $1
+   OR EXISTS (SELECT 1 FROM unnest(articles) a WHERE a ILIKE $1)
+ORDER BY (id = $2)::int DESC, name ASC
+LIMIT $3
+"""
+
+_PARTS_BY_IDS = (
+    "SELECT id, name, articles FROM smart_ext.parts WHERE id = ANY($1::text[])"
+)
+
+_ITEMS_FOR_PARTS = """
+SELECT id, smart_part_id, defect, defect_note, status
+FROM uchet_ext.items
+WHERE smart_part_id = ANY($1::text[]) AND status = 'in_stock'
+"""
+
+_ITEM_FULL_BY_ID = """
+SELECT id, smart_part_id, defect, defect_note, status
+FROM uchet_ext.items
+WHERE id = $1
+"""
+
+_INSTANCE_COLLAGES_ONE_GROUP = """
+SELECT owner_id, id
+FROM photo_collages
+WHERE owner_kind = 'instance' AND group_id = $1 AND owner_id = ANY($2::text[])
+"""
+
+_PART_LIMIT = 80
+_ITEM_LIMIT = 30
+
+
+def _best_article(q: str, articles: list[str]) -> str | None:
+    if not articles:
+        return None
+    ql = q.lower().strip()
+    for a in articles:
+        if a.lower() == ql:
+            return a
+    for a in articles:
+        if a.lower().startswith(ql):
+            return a
+    return articles[0]
+
+
+def _rank(q: str, q_int: int | None, item_id: int, smart_id: str,
+          name: str | None, articles: list[str]) -> int:
+    """0=exact item id, 1=exact article, 2=prefix smart/name/article, 3=contains."""
+    ql = q.lower().strip()
+    if q_int is not None and item_id == q_int:
+        return 0
+    if any(a.lower() == ql for a in articles):
+        return 1
+    if (smart_id.lower().startswith(ql)
+            or (name and name.lower().startswith(ql))
+            or any(a.lower().startswith(ql) for a in articles)):
+        return 2
+    return 3
+
+
+async def search_items(
+    q: str, group_id: UUID, conn: "asyncpg.Connection", limit: int = _ITEM_LIMIT
+) -> tuple[int, list[dict]]:
+    """Unified item search for an instance group's manual picker.
+
+    Returns (parts_matched, ranked_results). Two foreign servers are never
+    joined in one SQL — items and parts are fetched separately and stitched.
+
+    - text path (smart-id / name / article): only eligible items
+      (in_stock + passes defect_filter) are returned;
+    - id path (q is an integer): the exact item is always returned, flagged with
+      `selectable`/`block_reason`, so the UI can show *why* it can't be picked.
+    """
+    cfg = gconfig.get(group_id)
+    if cfg is None:
+        return 0, []
+
+    def passes(defect: bool) -> bool:
+        if cfg.defect_filter == "with":
+            return bool(defect)
+        if cfg.defect_filter == "without":
+            return not defect
+        return True
+
+    pattern = f"%{q}%"
+    part_rows = await conn.fetch(_PARTS_BY_TEXT, pattern, q, _PART_LIMIT)
+    part_map = {r["id"]: r for r in part_rows}
+    parts_matched = len(part_map)
+
+    text_items: list = []
+    if part_map:
+        text_items = await conn.fetch(_ITEMS_FOR_PARTS, list(part_map.keys()))
+
+    q_int: int | None = None
+    qs = q.strip()
+    if qs.isdigit():
+        try:
+            q_int = int(qs)
+        except ValueError:
+            q_int = None
+
+    id_item = None
+    if q_int is not None:
+        id_item = await conn.fetchrow(_ITEM_FULL_BY_ID, q_int)
+
+    # Candidate set: eligible text items + the exact-id item (always).
+    candidates: dict[int, dict] = {}
+    for it in text_items:
+        if passes(it["defect"]):
+            candidates[it["id"]] = dict(it)
+    if id_item is not None:
+        candidates[id_item["id"]] = dict(id_item)
+
+    if not candidates:
+        return parts_matched, []
+
+    # Pull smart meta for any candidate part not already loaded (the id item's).
+    missing = {
+        c["smart_part_id"] for c in candidates.values()
+        if c["smart_part_id"] and c["smart_part_id"] not in part_map
+    }
+    if missing:
+        for r in await conn.fetch(_PARTS_BY_IDS, list(missing)):
+            part_map[r["id"]] = r
+
+    item_ids_text = [str(i) for i in candidates]
+    ex_rows = await conn.fetch(_INSTANCE_COLLAGES_ONE_GROUP, group_id, item_ids_text)
+    existing = {r["owner_id"]: str(r["id"]) for r in ex_rows}
+
+    results: list[dict] = []
+    for iid, it in candidates.items():
+        part = part_map.get(it["smart_part_id"])
+        name = part["name"] if part else None
+        articles = list(part["articles"] or []) if part else []
+        in_stock = it["status"] == "in_stock"
+        pf = passes(it["defect"])
+        selectable = in_stock and pf
+        block = None
+        if not in_stock:
+            block = "нет на складе"
+        elif not pf:
+            block = ("дефект не подходит для этой группы"
+                     if cfg.defect_filter == "without"
+                     else "нужен дефектный экземпляр")
+        results.append({
+            "item_id": iid,
+            "smart_part_id": it["smart_part_id"],
+            "smart_part_name": name,
+            "article": _best_article(q, articles),
+            "defect": it["defect"],
+            "defect_note": it["defect_note"],
+            "status": it["status"],
+            "in_stock": in_stock,
+            "passes_filter": pf,
+            "selectable": selectable,
+            "block_reason": block,
+            "existing_collage_id": existing.get(str(iid)),
+            "_score": _rank(q, q_int, iid, it["smart_part_id"], name, articles),
+        })
+
+    results.sort(key=lambda r: (r["_score"], r["item_id"]))
+    for r in results:
+        r.pop("_score", None)
+    return parts_matched, results[:limit]

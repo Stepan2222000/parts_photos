@@ -16,10 +16,13 @@ from ..models import Photo
 from ..studio import groups as gconfig
 from ..studio.article_match_db import (
     items_for_part,
+    search_items,
     smart_collage_for_part,
 )
 from ..studio.schemas import (
     GroupSuggestion,
+    ItemSearchResponse,
+    ItemSearchResult,
     JobSuggestions,
     LookupItem,
     LookupSmart,
@@ -540,6 +543,31 @@ async def lookup_items(
     async with pool().acquire() as conn:
         rows = await items_for_part(smart_part_id, group_id, conn)
     return [LookupItem(**r) for r in rows]
+
+
+@router.get("/lookup/item-search", response_model=ItemSearchResponse)
+async def lookup_item_search(
+    q: str = Query(min_length=1, max_length=200),
+    group_id: UUID = Query(...),
+    limit: int = Query(default=30, ge=1, le=100),
+) -> ItemSearchResponse:
+    """Unified item search for the manual instance-collage picker.
+
+    Accepts any instance group that has a creation mode (owner_kind=instance and
+    studio_role != 'none'); "Поступления" (role none) and smart_part groups are
+    rejected — no silent fallback.
+    """
+    cfg = gconfig.get(group_id)
+    if cfg is None or cfg.studio_role == "none":
+        raise HTTPException(400, "group has no instance-collage creation mode")
+    if cfg.owner_kind != "instance":
+        raise HTTPException(400, "this group is not item-based")
+    async with pool().acquire() as conn:
+        parts_matched, rows = await search_items(q, group_id, conn, limit)
+    return ItemSearchResponse(
+        parts_matched=parts_matched,
+        results=[ItemSearchResult(**r) for r in rows],
+    )
 
 
 @router.get("/lookup/smart", response_model=LookupSmart)

@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 
 OwnerKind = Literal["smart_part", "instance"]
+DefectFilter = Literal["with", "without", "any"]
 
 
 class Group(BaseModel):
@@ -20,6 +21,11 @@ class Group(BaseModel):
     updated_at: datetime
     collages_count: int = 0
     photos_count: int = 0
+    # From GROUP_SETTINGS (studio/groups.py). Both null when the group has no
+    # collage-creation mode (not in config, or studio_role == "none" like
+    # "Поступления"). The frontend disables "New collage" in that case.
+    owner_kind: OwnerKind | None = None
+    defect_filter: DefectFilter | None = None
 
 
 class GroupPositionUpdate(BaseModel):
@@ -55,6 +61,9 @@ class Collage(BaseModel):
     owner_name: str | None = None
     owner_articles: list[str] = []
     group_name: str | None = None
+    # instance-only: state of the physical item this collage is bound to.
+    owner_defect: bool | None = None
+    owner_defect_note: str | None = None
 
 
 class CollageDetail(BaseModel):
@@ -65,6 +74,8 @@ class CollageDetail(BaseModel):
     owner_id: str
     owner_name: str | None = None
     owner_articles: list[str] = []
+    owner_defect: bool | None = None
+    owner_defect_note: str | None = None
     photos: list["Photo"] = []
 
 

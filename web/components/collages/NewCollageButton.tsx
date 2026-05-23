@@ -1,42 +1,84 @@
 "use client";
 
 import { useState } from "react";
+import type { DefectFilter, OwnerKind } from "@/lib/types";
 import CreateCollageDialog from "./CreateCollageDialog";
 
 interface Props {
   groupId: string;
+  ownerKind: OwnerKind | null;
+  defectFilter: DefectFilter | null;
 }
 
-export default function NewCollageButton({ groupId }: Props) {
+const BTN: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 8,
+  height: 36,
+  padding: "0 16px",
+  borderRadius: 8,
+  fontWeight: 500,
+  fontSize: 13.5,
+  fontFamily: "inherit",
+};
+
+export default function NewCollageButton({ groupId, ownerKind, defectFilter }: Props) {
   const [open, setOpen] = useState(false);
+
+  // No creation mode for this group (e.g. "Поступления" — track-number owner).
+  if (!ownerKind) {
+    return (
+      <button
+        type="button"
+        disabled
+        title="Создание коллажей для этой группы не настроено"
+        style={{
+          ...BTN,
+          background: "transparent",
+          color: "var(--text-faint)",
+          border: "1px dashed var(--border-strong)",
+          cursor: "not-allowed",
+        }}
+      >
+        <PlusIcon />
+        New collage
+      </button>
+    );
+  }
+
   return (
     <>
       <button
         type="button"
         onClick={() => setOpen(true)}
         style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 8,
-          height: 36,
-          padding: "0 16px",
+          ...BTN,
           background: "var(--brand-coral)",
           color: "#fff",
           border: "1px solid var(--brand-coral-active)",
-          borderRadius: 8,
           boxShadow: "var(--shadow-coral-inset)",
-          fontWeight: 500,
-          fontSize: 13.5,
           cursor: "pointer",
-          fontFamily: "inherit",
         }}
       >
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 5v14M5 12h14" />
-        </svg>
+        <PlusIcon />
         New collage
       </button>
-      {open && <CreateCollageDialog groupId={groupId} onClose={() => setOpen(false)} />}
+      {open && (
+        <CreateCollageDialog
+          groupId={groupId}
+          ownerKind={ownerKind}
+          defectFilter={defectFilter}
+          onClose={() => setOpen(false)}
+        />
+      )}
     </>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
   );
 }

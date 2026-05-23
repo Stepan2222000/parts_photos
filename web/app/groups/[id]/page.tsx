@@ -32,7 +32,13 @@ export default async function GroupPage({ params, searchParams }: Props) {
       groups={groups}
       activeGroupId={id}
       crumbs={[{ label: "Photos" }, { label: active.name, here: true }]}
-      topbarRight={<NewCollageButton groupId={id} />}
+      topbarRight={
+        <NewCollageButton
+          groupId={id}
+          ownerKind={active.owner_kind}
+          defectFilter={active.defect_filter}
+        />
+      }
     >
       <h1 className="display display-md">{active.name}.</h1>
       {active.description && (

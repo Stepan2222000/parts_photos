@@ -2,6 +2,7 @@ import type {
   Collage,
   CollageDetail,
   Group,
+  ItemSearchResponse,
   LookupItem,
   LookupSmart,
   OwnerSearchResult,
@@ -159,6 +160,11 @@ export const api = {
     lookupItems: (smartPartId: string, groupId: string) =>
       req<LookupItem[]>(
         `/studio/lookup/items?smart_part_id=${encodeURIComponent(smartPartId)}&group_id=${encodeURIComponent(groupId)}`,
+      ),
+
+    itemSearch: (q: string, groupId: string, limit = 30) =>
+      req<ItemSearchResponse>(
+        `/studio/lookup/item-search?q=${encodeURIComponent(q)}&group_id=${encodeURIComponent(groupId)}&limit=${limit}`,
       ),
 
     lookupSmart: (smartPartId: string, groupId: string) =>

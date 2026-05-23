@@ -6,8 +6,19 @@ from fastapi import APIRouter, HTTPException
 
 from ..db import pool
 from ..models import Group, GroupCreate, GroupPatch, GroupPositionUpdate
+from ..studio import groups as gconfig
 
 router = APIRouter(prefix="/groups", tags=["groups"])
+
+
+def _creation_mode(group_id) -> tuple[str | None, str | None]:
+    """(owner_kind, defect_filter) for the create flow, or (None, None) when the
+    group has no manual-creation mode: absent from config, or studio_role=='none'
+    (e.g. "Поступления" — track-number owner, handled separately)."""
+    cfg = gconfig.get(group_id)
+    if cfg is None or cfg.studio_role == "none":
+        return None, None
+    return cfg.owner_kind, cfg.defect_filter
 
 
 @router.get("", response_model=list[Group])
@@ -26,7 +37,11 @@ async def list_groups() -> list[Group]:
         ORDER BY g.position ASC, g.name ASC
         """
     )
-    return [Group(**dict(r)) for r in rows]
+    out: list[Group] = []
+    for r in rows:
+        owner_kind, defect_filter = _creation_mode(r["id"])
+        out.append(Group(**dict(r), owner_kind=owner_kind, defect_filter=defect_filter))
+    return out
 
 
 @router.post("", response_model=Group, status_code=201)
