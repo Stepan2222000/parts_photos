@@ -21,11 +21,12 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-import type { Photo } from "@/lib/types";
+import type { MoveTarget, Photo } from "@/lib/types";
 import { api, ApiError } from "@/lib/api";
 import { downloadFile, photoFilename } from "@/lib/download";
 import { copyImageToClipboard } from "@/lib/clipboard";
 import Lightbox from "./Lightbox";
+import TransferDialog from "./TransferDialog";
 import s from "./PhotosGrid.module.css";
 
 function CopyIcon() {
@@ -230,17 +231,33 @@ function Tile({
 
 interface Props {
   collageId: string;
+  groupId: string;
   ownerId: string;
   photos: Photo[];
 }
 
-export default function PhotosGrid({ collageId, ownerId, photos: initialPhotos }: Props) {
+export default function PhotosGrid({ collageId, groupId, ownerId, photos: initialPhotos }: Props) {
   const router = useRouter();
   const dndId = useId();
   const [photos, setPhotos] = useState(initialPhotos);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Publication channels this group's raw photos may be moved into. Empty when
+  // the current group isn't a direct-move source → the move action is hidden.
+  const [moveTargets, setMoveTargets] = useState<MoveTarget[]>([]);
+  const [showTransfer, setShowTransfer] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    api.groups
+      .moveTargets(groupId)
+      .then((t) => alive && setMoveTargets(t))
+      .catch(() => alive && setMoveTargets([]));
+    return () => {
+      alive = false;
+    };
+  }, [groupId]);
 
   useEffect(() => {
     setPhotos(initialPhotos);
@@ -342,6 +359,15 @@ export default function PhotosGrid({ collageId, ownerId, photos: initialPhotos }
     router.push(`/studio?${qs}`);
   }
 
+  function onTransferDone(movedIds: string[]) {
+    const gone = new Set(movedIds);
+    setPhotos((curr) => curr.filter((p) => !gone.has(p.id)));
+    setShowTransfer(false);
+    exitSelect();
+    router.refresh();
+  }
+
+  const canMove = moveTargets.length > 0;
   const allSelected = uploaded.length > 0 && selected.size === uploaded.length;
 
   return (
@@ -362,6 +388,16 @@ export default function PhotosGrid({ collageId, ownerId, photos: initialPhotos }
             <button type="button" className={s.btnGhost} onClick={exitSelect}>
               Отмена
             </button>
+            {canMove && (
+              <button
+                type="button"
+                className={s.btnGhost}
+                disabled={selected.size === 0}
+                onClick={() => setShowTransfer(true)}
+              >
+                На публикацию ({selected.size}) →
+              </button>
+            )}
             <button
               type="button"
               className={s.btnCoral}
@@ -418,6 +454,15 @@ export default function PhotosGrid({ collageId, ownerId, photos: initialPhotos }
           startIndex={lightboxIndex}
           ownerId={ownerId}
           onClose={() => setLightboxIndex(null)}
+        />
+      )}
+      {showTransfer && (
+        <TransferDialog
+          collageId={collageId}
+          targets={moveTargets}
+          photoIds={[...selected]}
+          onClose={() => setShowTransfer(false)}
+          onDone={onTransferDone}
         />
       )}
     </>

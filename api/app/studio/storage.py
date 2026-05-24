@@ -89,6 +89,21 @@ def move_studio_to_photos(src_key: str, dest_key: str) -> None:
         )
 
 
+def copy_within_photos(src_key: str, dst_key: str) -> None:
+    """Server-side copy inside the photos bucket. No bytes flow through the
+    client. Used by the direct (raw) move into a publication channel."""
+    copy_object(settings.minio_bucket, src_key, settings.minio_bucket, dst_key)
+
+
+def delete_photos_object(s3_key: str) -> None:
+    """Best-effort delete of a single object in the photos bucket. Called after
+    a move's DB commit — a failure here only leaves a harmless orphan."""
+    try:
+        minio().remove_object(settings.minio_bucket, s3_key)
+    except Exception as e:
+        log.warning("failed to delete photos object %s: %s", s3_key, e)
+
+
 def delete_prefix(bucket: str, prefix: str) -> int:
     """Delete every object under `prefix` in `bucket`. Returns number deleted."""
     c = minio()

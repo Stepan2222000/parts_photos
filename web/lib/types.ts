@@ -149,6 +149,12 @@ export interface TransferRules {
   allowed: Record<string, string[]>;
 }
 
+/** A publication channel a collage's raw photos may be physically moved into. */
+export interface MoveTarget {
+  id: string;
+  name: string;
+}
+
 export interface LookupSmart {
   smart_part_id: string;
   existing_collage_id: string | null;

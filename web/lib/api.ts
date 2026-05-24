@@ -5,6 +5,7 @@ import type {
   ItemSearchResponse,
   LookupItem,
   LookupSmart,
+  MoveTarget,
   OwnerSearchResult,
   Photo,
   StudioAsset,
@@ -51,6 +52,7 @@ export const api = {
     create: (body: { name: string; description?: string; is_reference?: boolean }) =>
       req<Group>("/groups", { method: "POST", body: JSON.stringify(body) }),
     delete: (id: string) => req<void>(`/groups/${id}`, { method: "DELETE" }),
+    moveTargets: (id: string) => req<MoveTarget[]>(`/groups/${id}/move-targets`),
     reorder: (updates: { group_id: string; position: number }[]) =>
       req<void>("/groups/positions", {
         method: "PUT",
@@ -77,6 +79,11 @@ export const api = {
       req<void>(`/collages/${id}/positions`, {
         method: "PUT",
         body: JSON.stringify(updates),
+      }),
+    transfer: (collageId: string, targetGroupId: string, photoIds: string[]) =>
+      req<Photo[]>(`/collages/${collageId}/transfer`, {
+        method: "POST",
+        body: JSON.stringify({ target_group_id: targetGroupId, photo_ids: photoIds }),
       }),
     search: (params: {
       q: string;

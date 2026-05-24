@@ -54,7 +54,12 @@ export default async function CollagePage({ params }: Props) {
         </div>
       </div>
 
-      <PhotosGrid collageId={collage.id} ownerId={collage.owner_id} photos={collage.photos} />
+      <PhotosGrid
+        collageId={collage.id}
+        groupId={collage.group_id}
+        ownerId={collage.owner_id}
+        photos={collage.photos}
+      />
       <Uploader collageId={collage.id} />
     </Shell>
   );

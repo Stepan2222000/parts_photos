@@ -95,6 +95,36 @@ def is_transfer_allowed(source_group_id: UUID | None, target_group_id: UUID) -> 
     return True
 
 
+# ---------------------------------------------------------------------------
+# Direct physical move (no Studio generation)
+# ---------------------------------------------------------------------------
+#
+# Raw photos may be *physically* promoted into a publication channel — the photo
+# row is repointed and the object relocated, nothing is generated. The allowed
+# routes are deliberately NARROWER than `is_transfer_allowed` (the Studio
+# matrix, which also permits e.g. Реальные→Эталонные / Avito2). Here each source
+# maps to exactly its own publication channel.
+DIRECT_MOVE_TARGETS: dict[UUID, tuple[UUID, ...]] = {
+    # Реальные фотографии → Реальные на публикацию
+    UUID("721bf726-cdda-4ca8-bf22-f345ca0f677b"): (
+        UUID("3cf67240-7597-451a-8ec1-fb097afdeb88"),
+    ),
+    # Дефектные фотографии → Дефектные на публикацию
+    UUID("edce2987-daae-4339-8330-8cb96ad912bf"): (
+        UUID("a1790194-efa0-4dda-bed4-d8bc15b3b624"),
+    ),
+}
+
+
+def direct_move_targets(source_group_id: UUID) -> list[UUID]:
+    """Publication channels a source group's raw photos may be moved into."""
+    return list(DIRECT_MOVE_TARGETS.get(source_group_id, ()))
+
+
+def is_direct_move_allowed(source_group_id: UUID, target_group_id: UUID) -> bool:
+    return target_group_id in DIRECT_MOVE_TARGETS.get(source_group_id, ())
+
+
 def transfer_rules_json() -> dict:
     """Frontend-friendly snapshot of the allowed source→target matrix.
 

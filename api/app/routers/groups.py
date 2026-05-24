@@ -5,7 +5,13 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException
 
 from ..db import pool
-from ..models import Group, GroupCreate, GroupPatch, GroupPositionUpdate
+from ..models import (
+    Group,
+    GroupCreate,
+    GroupPatch,
+    GroupPositionUpdate,
+    MoveTarget,
+)
 from ..studio import groups as gconfig
 
 router = APIRouter(prefix="/groups", tags=["groups"])
@@ -42,6 +48,21 @@ async def list_groups() -> list[Group]:
         owner_kind, defect_filter = _creation_mode(r["id"])
         out.append(Group(**dict(r), owner_kind=owner_kind, defect_filter=defect_filter))
     return out
+
+
+@router.get("/{group_id}/move-targets", response_model=list[MoveTarget])
+async def list_move_targets(group_id: UUID) -> list[MoveTarget]:
+    """Publication channels this group's raw photos may be physically moved
+    into (config-as-code in studio/groups.py). Empty for groups that aren't a
+    direct-move source — the frontend hides the move action then."""
+    target_ids = gconfig.direct_move_targets(group_id)
+    if not target_ids:
+        return []
+    rows = await pool().fetch(
+        "SELECT id, name FROM photo_groups WHERE id = ANY($1::uuid[]) ORDER BY position ASC",
+        target_ids,
+    )
+    return [MoveTarget(id=r["id"], name=r["name"]) for r in rows]
 
 
 @router.post("", response_model=Group, status_code=201)

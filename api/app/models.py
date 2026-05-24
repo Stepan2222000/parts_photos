@@ -50,6 +50,17 @@ class CollageCreate(BaseModel):
     owner_id: str = Field(min_length=1, max_length=200)
 
 
+class MoveTarget(BaseModel):
+    """A publication channel a collage's raw photos may be moved into."""
+    id: UUID
+    name: str
+
+
+class CollageTransferRequest(BaseModel):
+    target_group_id: UUID
+    photo_ids: list[UUID] = Field(min_length=1)
+
+
 class Collage(BaseModel):
     id: UUID
     group_id: UUID
