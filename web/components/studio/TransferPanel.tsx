@@ -134,13 +134,23 @@ export default function TransferPanel({ batch, onTransferred }: Props) {
     setBusy(true);
     try {
       const transfers = Array.from(picked).map((jobId) => {
+        const job = eligibleJobs.find((j) => j.id === jobId);
+        if (!job) return null;
         if (target.owner_kind === "smart_part") {
-          return { job_id: jobId, group_id: active, item_id: null };
+          const st = pickableState(job, target, manualPicks);
+          const smartPartId =
+            st.kind === "smart-existing" || st.kind === "smart-create"
+              ? st.smartPartId
+              : st.kind === "manual" && st.pick.kind === "smart_part"
+                ? st.pick.smartPartId
+                : null;
+          if (smartPartId == null) return null;
+          return { job_id: jobId, group_id: active, item_id: null, smart_part_id: smartPartId };
         }
         const itemId = pickedItems.get(jobId);
         if (itemId == null) return null;
         return { job_id: jobId, group_id: active, item_id: itemId };
-      }).filter((x): x is { job_id: string; group_id: string; item_id: number | null } => x !== null);
+      }).filter((x) => x !== null);
       if (transfers.length === 0) return;
       await api.studio.transfers(batch.id, transfers);
       await onTransferred();

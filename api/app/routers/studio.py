@@ -524,7 +524,7 @@ async def transfer_batch(batch_id: UUID, body: TransferRequest) -> list[Photo]:
 
     out: list[Photo] = []
     for e in body.transfers:
-        out.append(await _do_transfer(e.job_id, e.group_id, e.item_id))
+        out.append(await _do_transfer(e.job_id, e.group_id, e.item_id, e.smart_part_id))
     return out
 
 
@@ -598,7 +598,12 @@ async def lookup_smart(
 # ---------------------------------------------------------------------------
 
 
-async def _do_transfer(job_id: UUID, group_id: UUID, item_id: int | None) -> Photo:
+async def _do_transfer(
+    job_id: UUID,
+    group_id: UUID,
+    item_id: int | None,
+    smart_part_id: str | None = None,
+) -> Photo:
     cfg = gconfig.get(group_id)
     if cfg is None or cfg.studio_role != "target":
         raise HTTPException(400, "group_id is not a Studio target group")
@@ -651,28 +656,36 @@ async def _do_transfer(job_id: UUID, group_id: UUID, item_id: int | None) -> Pho
                 raise HTTPException(400, f"item {item_id} is defective; group requires defect=false")
             owner_id = str(item_id)
         else:
-            # smart_part target: derive smart_part_id from job's source or its
-            # suggestion. We don't take it from the request — the matching/
-            # source already pinned it.
-            sp_row = await conn.fetchrow(
-                """
-                SELECT j.suggested_collages_json,
-                       sc.owner_kind AS src_owner_kind,
-                       sc.owner_id   AS src_owner_id
-                FROM studio_jobs j
-                LEFT JOIN photos sp ON sp.id = j.source_photo_id
-                LEFT JOIN photo_collages sc ON sc.id = sp.collage_id
-                WHERE j.id = $1
-                """,
-                job_id,
-            )
-            smart_part_id = await _resolve_smart_for_smart_target(conn, sp_row)
-            if smart_part_id is None:
-                raise HTTPException(
-                    400,
-                    "Cannot resolve smart_part for this job — manual flow required",
+            # smart_part target. Prefer the part the user picked in the UI
+            # (manual lookup or shown auto-suggestion); only fall back to
+            # server-side resolution when the request omits it.
+            if smart_part_id is not None:
+                exists = await conn.fetchval(
+                    "SELECT 1 FROM smart_ext.parts WHERE id = $1", smart_part_id
                 )
-            owner_id = smart_part_id
+                if not exists:
+                    raise HTTPException(404, f"smart_part_id '{smart_part_id}' not in smart catalog")
+                owner_id = smart_part_id
+            else:
+                sp_row = await conn.fetchrow(
+                    """
+                    SELECT j.suggested_collages_json,
+                           sc.owner_kind AS src_owner_kind,
+                           sc.owner_id   AS src_owner_id
+                    FROM studio_jobs j
+                    LEFT JOIN photos sp ON sp.id = j.source_photo_id
+                    LEFT JOIN photo_collages sc ON sc.id = sp.collage_id
+                    WHERE j.id = $1
+                    """,
+                    job_id,
+                )
+                resolved = await _resolve_smart_for_smart_target(conn, sp_row)
+                if resolved is None:
+                    raise HTTPException(
+                        400,
+                        "Cannot resolve smart_part for this job — manual flow required",
+                    )
+                owner_id = resolved
 
         async with conn.transaction():
             lock_key = f"{group_id}:{owner_id}"

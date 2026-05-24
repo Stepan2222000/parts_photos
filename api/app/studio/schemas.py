@@ -94,6 +94,10 @@ class TransferEntry(BaseModel):
     group_id: UUID
     # Required for instance targets, must be omitted/null for smart_part targets.
     item_id: int | None = None
+    # For smart_part targets: the part the user picked (manual lookup or the
+    # auto-suggestion shown in the UI). Falls back to server-side resolution
+    # when omitted.
+    smart_part_id: str | None = None
 
 
 class TransferRequest(BaseModel):

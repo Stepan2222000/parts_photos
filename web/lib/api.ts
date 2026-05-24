@@ -150,7 +150,7 @@ export const api = {
 
     transfers: (
       batchId: string,
-      transfers: { job_id: string; group_id: string; item_id?: number | null }[],
+      transfers: { job_id: string; group_id: string; item_id?: number | null; smart_part_id?: string | null }[],
     ) =>
       req<Photo[]>(`/studio/batches/${batchId}/transfers`, {
         method: "POST",
