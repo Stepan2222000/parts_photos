@@ -2,22 +2,22 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import type { DefectFilter, ItemSearchResult } from "@/lib/types";
+import type { ConditionFilter, ItemSearchResult } from "@/lib/types";
 import s from "./ItemPicker.module.css";
 
 interface Props {
   groupId: string;
-  defectFilter: DefectFilter | null;
+  conditionFilter: ConditionFilter | null;
   busy: boolean;
   onPick: (item: ItemSearchResult) => void;
 }
 
 const FILTER_HINT: Record<string, string> = {
-  with: "только дефектные экземпляры",
-  without: "только без дефектов",
+  personal: "только personal-экземпляры",
+  defect: "только дефектные",
 };
 
-export default function ItemPicker({ groupId, defectFilter, busy, onPick }: Props) {
+export default function ItemPicker({ groupId, conditionFilter, busy, onPick }: Props) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<ItemSearchResult[]>([]);
   const [partsMatched, setPartsMatched] = useState(0);
@@ -82,10 +82,10 @@ export default function ItemPicker({ groupId, defectFilter, busy, onPick }: Prop
         {loading && <span className={s.spinner} aria-hidden />}
       </div>
 
-      {defectFilter && FILTER_HINT[defectFilter] && (
+      {conditionFilter && FILTER_HINT[conditionFilter] && (
         <div className={s.filterHint}>
           <span className={s.filterDot} />
-          {FILTER_HINT[defectFilter]}
+          {FILTER_HINT[conditionFilter]}
         </div>
       )}
 
@@ -98,7 +98,7 @@ export default function ItemPicker({ groupId, defectFilter, busy, onPick }: Prop
 
         {hasQuery && !loading && results.length === 0 && partsMatched > 0 && (
           <div className={s.muted}>
-            Запчасть найдена, но нет подходящих экземпляров (на складе + нужный дефект-класс).
+            Запчасть найдена, но нет подходящих экземпляров (на складе + нужное состояние).
           </div>
         )}
         {hasQuery && !loading && results.length === 0 && partsMatched === 0 && (
@@ -125,10 +125,11 @@ export default function ItemPicker({ groupId, defectFilter, busy, onPick }: Prop
                   <code className={s.smart}>{it.smart_part_id}</code>
                   {it.article && <code className={s.article}>{it.article}</code>}
                 </span>
-                {it.defect_note && <span className={s.defectNote}>{it.defect_note}</span>}
+                {it.condition_note && <span className={s.defectNote}>{it.condition_note}</span>}
               </span>
               <span className={s.tags}>
-                {it.defect && <span className={s.defectChip}>дефект</span>}
+                {it.condition === "defect" && <span className={s.defectChip}>дефект</span>}
+                {it.condition === "personal" && <span className={s.defectChip}>personal</span>}
                 {isExisting ? (
                   <span className={s.existChip}>открыть →</span>
                 ) : !it.selectable ? (

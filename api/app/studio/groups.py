@@ -1,12 +1,13 @@
-"""Studio group configuration — hardcoded UUID → role/owner_kind/defect_filter map.
+"""Studio group configuration — hardcoded UUID → role/owner_kind/condition_filter map.
 
 Config-as-code: roles change rarely (new group = PR, not API call). Group rows
 still live in `photo_groups` for naming/ordering — this module only adds the
 Studio-specific behavior on top.
 
 If a group_id appears in DB but not here, treated as `studio_role=none`
-(invisible to Studio). The `accepts_defects` flag is the matrix gate: a target
-with `accepts_defects=False` refuses any source whose `defect_filter='with'`.
+(invisible to Studio). `condition_filter` is the item-state gate: an instance
+target with `condition_filter` in ('personal', 'defect') only accepts items
+whose `condition` matches; 'any' (and smart_part targets) accept everything.
 """
 from __future__ import annotations
 
@@ -14,43 +15,43 @@ from dataclasses import dataclass
 from typing import Literal
 from uuid import UUID
 
+from fastapi import HTTPException
+
 StudioRole = Literal["source", "target", "none"]
 OwnerKind = Literal["smart_part", "instance"]
-DefectFilter = Literal["with", "without", "any"]
+ConditionFilter = Literal["personal", "defect", "any"]
 
 
 @dataclass(frozen=True)
 class GroupConfig:
     studio_role: StudioRole
     owner_kind: OwnerKind
-    defect_filter: DefectFilter
-    accepts_defects: bool = True
+    condition_filter: ConditionFilter
 
 
 GROUP_SETTINGS: dict[UUID, GroupConfig] = {
-    # Эталонные на публикацию — canonical smart_part references; now also a
-    # Studio target (smart_part-level), but defects forbidden ("дефект в
-    # эталон нельзя").
+    # Эталонные на публикацию — canonical smart_part references; also a Studio
+    # target (smart_part-level). No item condition check (smart_part owner).
     UUID("ae697d8d-e803-42c4-9982-ecefbf8a8cdf"):
-        GroupConfig("target", "smart_part", "any", accepts_defects=False),
-    # Реальные на публикацию — instance, only without-defect items, curated.
+        GroupConfig("target", "smart_part", "any"),
+    # Реальные на публикацию — instance, only personal-condition items, curated.
     UUID("3cf67240-7597-451a-8ec1-fb097afdeb88"):
-        GroupConfig("target", "instance", "without", accepts_defects=False),
-    # Дефектные на публикацию — instance, only with-defect items.
+        GroupConfig("target", "instance", "personal"),
+    # Дефектные на публикацию — instance, only defect-condition items.
     UUID("a1790194-efa0-4dda-bed4-d8bc15b3b624"):
-        GroupConfig("target", "instance", "with", accepts_defects=True),
-    # Avito 2-й аккаунт — smart_part-level target, accepts everything.
+        GroupConfig("target", "instance", "defect"),
+    # Avito 2-й аккаунт — smart_part-level target, no item condition check.
     UUID("fa0df9bb-f285-4eb2-ab46-cd24e520a4e1"):
-        GroupConfig("target", "smart_part", "any", accepts_defects=True),
+        GroupConfig("target", "smart_part", "any"),
     # Поступления — outside Studio entirely.
     UUID("b66cc603-0bf2-4010-a602-a871f56d3e66"):
         GroupConfig("none", "instance", "any"),
-    # Реальные фотографии — instance, without-defect, source-only.
+    # Реальные фотографии — instance, personal-condition, source-only.
     UUID("721bf726-cdda-4ca8-bf22-f345ca0f677b"):
-        GroupConfig("source", "instance", "without"),
-    # Дефектные фотографии — instance, with-defect, source-only.
+        GroupConfig("source", "instance", "personal"),
+    # Дефектные фотографии — instance, defect-condition, source-only.
     UUID("edce2987-daae-4339-8330-8cb96ad912bf"):
-        GroupConfig("source", "instance", "with"),
+        GroupConfig("source", "instance", "defect"),
 }
 
 # Convenient aliases used in matching/UI.
@@ -85,14 +86,30 @@ def is_transfer_allowed(source_group_id: UUID | None, target_group_id: UUID) -> 
     if src is None or src.studio_role == "none":
         return False  # unknown group, or one Studio doesn't read from
 
-    src_defective = src.defect_filter == "with"
-    if src_defective and not tgt.accepts_defects:
-        return False
-    if not src_defective and tgt.defect_filter == "with":
-        # Clean source can't be promoted into a defects-only target —
-        # wouldn't be honest about the item's state.
-        return False
-    return True
+    # 'any' target (smart_part channels) accepts any known source. Otherwise the
+    # source's condition_filter must match the target's exactly — a personal
+    # source can't be promoted into a defect-only channel and vice versa.
+    if tgt.condition_filter == "any":
+        return True
+    return src.condition_filter == tgt.condition_filter
+
+
+def assert_item_condition_allowed(item_condition: str, group_id: UUID) -> None:
+    """The ONE place that enforces an item's condition against a group.
+
+    Raises HTTPException(422) when the group is an instance channel restricted to
+    a single condition ('personal'/'defect') and the item doesn't match. No-op
+    for smart_part groups, 'any' filters, or unknown groups.
+    """
+    cfg = GROUP_SETTINGS.get(group_id)
+    if cfg is None or cfg.owner_kind != "instance":
+        return
+    if cfg.condition_filter in ("personal", "defect") and item_condition != cfg.condition_filter:
+        raise HTTPException(
+            422,
+            f"item condition '{item_condition}' не подходит для группы "
+            f"(нужен {cfg.condition_filter})",
+        )
 
 
 # ---------------------------------------------------------------------------

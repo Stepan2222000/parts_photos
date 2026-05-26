@@ -26,8 +26,8 @@ async def _instance_owner_meta(owner_ids: list[str]) -> dict[str, dict]:
 
     Two batched FDW queries — items then parts — stitched in Python. We never
     join `uchet_ext.items` and `smart_ext.parts` in one SQL (different foreign
-    servers → no join pushdown). Returns {owner_id: {name, articles, defect,
-    defect_note}}.
+    servers → no join pushdown). Returns {owner_id: {name, articles, condition,
+    condition_note}}.
     """
     int_ids: list[int] = []
     for oid in owner_ids:
@@ -39,7 +39,7 @@ async def _instance_owner_meta(owner_ids: list[str]) -> dict[str, dict]:
         return {}
 
     item_rows = await pool().fetch(
-        "SELECT id, smart_part_id, defect, defect_note "
+        "SELECT id, smart_part_id, condition, condition_note "
         "FROM uchet_ext.items WHERE id = ANY($1::int[])",
         int_ids,
     )
@@ -60,14 +60,14 @@ async def _instance_owner_meta(owner_ids: list[str]) -> dict[str, dict]:
         out[str(r["id"])] = {
             "name": p.get("name"),
             "articles": p.get("articles", []),
-            "defect": r["defect"],
-            "defect_note": r["defect_note"],
+            "condition": r["condition"],
+            "condition_note": r["condition_note"],
         }
     return out
 
 
 async def _enrich_instances(collages: list[Collage]) -> None:
-    """Fill name/articles/defect for instance collages in place."""
+    """Fill name/articles/condition for instance collages in place."""
     inst_ids = [c.owner_id for c in collages if c.owner_kind == "instance"]
     if not inst_ids:
         return
@@ -80,8 +80,8 @@ async def _enrich_instances(collages: list[Collage]) -> None:
             continue
         c.owner_name = m["name"]
         c.owner_articles = m["articles"]
-        c.owner_defect = m["defect"]
-        c.owner_defect_note = m["defect_note"]
+        c.owner_condition = m["condition"]
+        c.owner_condition_note = m["condition_note"]
 
 Filter = Literal["all", "empty", "few"]
 Sort = Literal["updated", "count", "owner"]
@@ -277,8 +277,8 @@ async def get_collage(collage_id: UUID) -> CollageDetail:
         if m:
             detail.owner_name = m["name"]
             detail.owner_articles = m["articles"]
-            detail.owner_defect = m["defect"]
-            detail.owner_defect_note = m["defect_note"]
+            detail.owner_condition = m["condition"]
+            detail.owner_condition_note = m["condition_note"]
     return detail
 
 
@@ -322,7 +322,7 @@ async def transfer_collage_photos(
         except (TypeError, ValueError):
             raise HTTPException(400, f"owner_id {owner_id!r} is not an item id")
         item = await pool().fetchrow(
-            "SELECT id, defect, status FROM uchet_ext.items WHERE id = $1", item_id
+            "SELECT id, condition, status FROM uchet_ext.items WHERE id = $1", item_id
         )
         if item is None:
             raise HTTPException(404, f"item {item_id} not found in parts_uchet")
@@ -330,14 +330,7 @@ async def transfer_collage_photos(
             raise HTTPException(
                 400, f"item {item_id} status={item['status']!r}, not in_stock"
             )
-        if tgt_cfg.defect_filter == "with" and not item["defect"]:
-            raise HTTPException(
-                400, f"item {item_id} is not defective; target requires defect=true"
-            )
-        if tgt_cfg.defect_filter == "without" and item["defect"]:
-            raise HTTPException(
-                400, f"item {item_id} is defective; target requires defect=false"
-            )
+        gconfig.assert_item_condition_allowed(item["condition"], target_group_id)
 
     # De-dup while preserving the requested order.
     photo_ids = list(dict.fromkeys(payload.photo_ids))

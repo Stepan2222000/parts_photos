@@ -105,7 +105,8 @@ export default function CollageGrid({ collages, showGroup }: Props) {
             {c.owner_kind === "instance" && (
               <div className={s.kicker}>
                 <span className={s.itemBadge}>#{c.owner_id}</span>
-                {c.owner_defect && <span className={s.defectChip}>дефект</span>}
+                {c.owner_condition === "defect" && <span className={s.defectChip}>дефект</span>}
+                {c.owner_condition === "personal" && <span className={s.defectChip}>personal</span>}
               </div>
             )}
             <div className={s.name}>

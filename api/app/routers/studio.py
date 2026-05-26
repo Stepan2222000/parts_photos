@@ -181,8 +181,7 @@ async def list_target_groups() -> list[TargetGroup]:
         out.append(TargetGroup(
             id=r["id"], name=r["name"],
             owner_kind=cfg.owner_kind,
-            defect_filter=cfg.defect_filter,
-            accepts_defects=cfg.accepts_defects,
+            condition_filter=cfg.condition_filter,
         ))
     return out
 
@@ -534,7 +533,7 @@ async def lookup_items(
     group_id: UUID = Query(...),
 ) -> list[LookupItem]:
     """Manual lookup for instance targets: list items of `smart_part_id` that
-    pass the target group's `defect_filter`."""
+    pass the target group's `condition_filter`."""
     cfg = gconfig.get(group_id)
     if cfg is None or cfg.studio_role != "target":
         raise HTTPException(400, "group_id is not a Studio target group")
@@ -643,17 +642,14 @@ async def _do_transfer(
             if item_id is None:
                 raise HTTPException(400, "item_id required for instance target")
             item = await conn.fetchrow(
-                "SELECT id, defect, status, smart_part_id FROM uchet_ext.items WHERE id = $1",
+                "SELECT id, condition, status, smart_part_id FROM uchet_ext.items WHERE id = $1",
                 item_id,
             )
             if item is None:
                 raise HTTPException(404, f"item {item_id} not found in parts_uchet")
             if item["status"] != "in_stock":
                 raise HTTPException(400, f"item {item_id} status={item['status']!r}, not in_stock")
-            if cfg.defect_filter == "with" and not item["defect"]:
-                raise HTTPException(400, f"item {item_id} is not defective; group requires defect=true")
-            if cfg.defect_filter == "without" and item["defect"]:
-                raise HTTPException(400, f"item {item_id} is defective; group requires defect=false")
+            gconfig.assert_item_condition_allowed(item["condition"], group_id)
             owner_id = str(item_id)
         else:
             # smart_part target. Prefer the part the user picked in the UI

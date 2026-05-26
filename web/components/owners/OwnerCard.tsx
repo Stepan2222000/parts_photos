@@ -24,8 +24,11 @@ export default function OwnerCard({ collage, thumbUrl }: Props) {
           >
             {collage.owner_kind === "smart_part" ? "Smart part" : "Экземпляр"}
           </span>
-          {collage.owner_kind === "instance" && collage.owner_defect && (
+          {collage.owner_kind === "instance" && collage.owner_condition === "defect" && (
             <span className={s.defect}>дефект</span>
+          )}
+          {collage.owner_kind === "instance" && collage.owner_condition === "personal" && (
+            <span className={s.defect}>personal</span>
           )}
         </div>
         <div className={s.name}>
@@ -40,8 +43,8 @@ export default function OwnerCard({ collage, thumbUrl }: Props) {
             ))}
           </div>
         )}
-        {collage.owner_kind === "instance" && collage.owner_defect_note && (
-          <div className={s.defectNote}>{collage.owner_defect_note}</div>
+        {collage.owner_kind === "instance" && collage.owner_condition_note && (
+          <div className={s.defectNote}>{collage.owner_condition_note}</div>
         )}
       </div>
     </article>

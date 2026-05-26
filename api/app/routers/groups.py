@@ -18,13 +18,14 @@ router = APIRouter(prefix="/groups", tags=["groups"])
 
 
 def _creation_mode(group_id) -> tuple[str | None, str | None]:
-    """(owner_kind, defect_filter) for the create flow, or (None, None) when the
-    group has no manual-creation mode: absent from config, or studio_role=='none'
-    (e.g. "Поступления" — track-number owner, handled separately)."""
+    """(owner_kind, condition_filter) for the create flow, or (None, None) when
+    the group has no manual-creation mode: absent from config, or
+    studio_role=='none' (e.g. "Поступления" — track-number owner, handled
+    separately)."""
     cfg = gconfig.get(group_id)
     if cfg is None or cfg.studio_role == "none":
         return None, None
-    return cfg.owner_kind, cfg.defect_filter
+    return cfg.owner_kind, cfg.condition_filter
 
 
 @router.get("", response_model=list[Group])
@@ -45,8 +46,8 @@ async def list_groups() -> list[Group]:
     )
     out: list[Group] = []
     for r in rows:
-        owner_kind, defect_filter = _creation_mode(r["id"])
-        out.append(Group(**dict(r), owner_kind=owner_kind, defect_filter=defect_filter))
+        owner_kind, condition_filter = _creation_mode(r["id"])
+        out.append(Group(**dict(r), owner_kind=owner_kind, condition_filter=condition_filter))
     return out
 
 

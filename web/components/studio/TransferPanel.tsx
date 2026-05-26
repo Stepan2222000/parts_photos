@@ -28,13 +28,13 @@ type RowState =
   | { kind: "smart-create"; smartPartId: string; smartPartName: string | null }
   | { kind: "instance-pick"; items: SuggestedItem[] }
   | { kind: "manual"; pick: ManualPick }
-  | { kind: "no-defect-match" }
+  | { kind: "no-condition-match" }
   | { kind: "no-smart-match" };
 
 interface SuggestedItem {
   item_id: number;
-  defect: boolean;
-  defect_note: string | null;
+  condition: string;
+  condition_note: string | null;
   existing_collage_id: string | null;
 }
 
@@ -75,7 +75,7 @@ export default function TransferPanel({ batch, onTransferred }: Props) {
       for (const j of eligibleJobs) {
         if (!isAllowed(j.source_group_id, g.id)) continue;
         const k = pickableState(j, g, manualPicks).kind;
-        if (k !== "no-smart-match" && k !== "no-defect-match") {
+        if (k !== "no-smart-match" && k !== "no-condition-match") {
           n++;
         }
       }
@@ -190,8 +190,8 @@ export default function TransferPanel({ batch, onTransferred }: Props) {
               <span className={s.tabMeta}>
                 {n > 0 ? `${n} готов${plural(n, "о", "ы", "ы")}` : "—"}
                 {g.owner_kind === "smart_part" && <em className={s.kindChip}>smart</em>}
-                {g.owner_kind === "instance" && g.defect_filter === "with" && <em className={s.filterChip}>дефектные</em>}
-                {g.owner_kind === "instance" && g.defect_filter === "without" && <em className={s.filterChip}>без дефектов</em>}
+                {g.owner_kind === "instance" && g.condition_filter === "defect" && <em className={s.filterChip}>дефектные</em>}
+                {g.owner_kind === "instance" && g.condition_filter === "personal" && <em className={s.filterChip}>personal</em>}
               </span>
             </button>
           );
@@ -307,7 +307,7 @@ function pickableState(
   if (sug) {
     const items = slot && slot.kind === "instance" ? slot.items : [];
     if (items.length > 0) return { kind: "instance-pick", items };
-    return { kind: "no-defect-match" };
+    return { kind: "no-condition-match" };
   }
   return { kind: "no-smart-match" };
 }
@@ -415,7 +415,7 @@ function RowDetail({
   if (state.kind === "no-smart-match") {
     return <div className={s.muted}>имя файла не распознано — найди запчасть вручную</div>;
   }
-  if (state.kind === "no-defect-match") {
+  if (state.kind === "no-condition-match") {
     return (
       <div className={s.muted}>
         нет подходящих экземпляров для этой группы
@@ -460,7 +460,7 @@ function RowDetail({
     return (
       <div className={s.singleCard}>
         <span className={s.itemBadge}>Item #{it.item_id}</span>
-        {it.defect && <span className={s.defectChip}>дефект</span>}
+        <ConditionChip condition={it.condition} />
         <span className={s.itemMode}>
           {it.existing_collage_id ? "→ добавится в существующий коллаж" : "➕ создастся новый коллаж"}
         </span>
@@ -480,13 +480,13 @@ function RowDetail({
           >
             <span className={s.itemRadio}>{active ? "●" : "○"}</span>
             <span className={s.itemBadge}>Item #{it.item_id}</span>
-            {it.defect && <span className={s.defectChip}>дефект</span>}
+            <ConditionChip condition={it.condition} />
             <span className={s.itemMode}>
               {it.existing_collage_id ? "уже есть коллаж" : "будет создан"}
             </span>
-            {it.defect_note && (
-              <span className={s.itemNote} title={it.defect_note}>
-                {it.defect_note.slice(0, 40)}{it.defect_note.length > 40 ? "…" : ""}
+            {it.condition_note && (
+              <span className={s.itemNote} title={it.condition_note}>
+                {it.condition_note.slice(0, 40)}{it.condition_note.length > 40 ? "…" : ""}
               </span>
             )}
           </button>
@@ -616,7 +616,7 @@ function ManualLookup({
                   }
                 >
                   <span className={s.itemBadge}>Item #{it.item_id}</span>
-                  {it.defect && <span className={s.defectChip}>дефект</span>}
+                  <ConditionChip condition={it.condition} />
                   <span className={s.itemMode}>
                     {it.existing_collage_id ? "уже есть коллаж" : "будет создан"}
                   </span>
@@ -703,6 +703,13 @@ function RulesModal({
       </div>
     </div>
   );
+}
+
+/** Small chip showing the item's condition; nothing for plain "new". */
+function ConditionChip({ condition }: { condition: string }) {
+  if (condition === "defect") return <span className={s.defectChip}>дефект</span>;
+  if (condition === "personal") return <span className={s.defectChip}>personal</span>;
+  return null;
 }
 
 function plural(n: number, one: string, few: string, many: string): string {

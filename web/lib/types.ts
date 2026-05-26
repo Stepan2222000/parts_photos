@@ -1,5 +1,5 @@
 export type OwnerKind = "smart_part" | "instance";
-export type DefectFilter = "with" | "without" | "any";
+export type ConditionFilter = "personal" | "defect" | "any";
 export type PhotoState = "pending" | "uploaded" | "failed" | "deleted";
 
 export interface Group {
@@ -15,7 +15,7 @@ export interface Group {
   // null when the group has no manual creation mode (not configured, or
   // studio_role=none like "Поступления").
   owner_kind: OwnerKind | null;
-  defect_filter: DefectFilter | null;
+  condition_filter: ConditionFilter | null;
 }
 
 export interface Collage {
@@ -30,8 +30,8 @@ export interface Collage {
   owner_name?: string | null;
   owner_articles?: string[];
   group_name?: string | null;
-  owner_defect?: boolean | null;
-  owner_defect_note?: string | null;
+  owner_condition?: string | null;
+  owner_condition_note?: string | null;
 }
 
 export interface Photo {
@@ -55,8 +55,8 @@ export interface CollageDetail {
   owner_id: string;
   owner_name: string | null;
   owner_articles: string[];
-  owner_defect?: boolean | null;
-  owner_defect_note?: string | null;
+  owner_condition?: string | null;
+  owner_condition_note?: string | null;
   photos: Photo[];
 }
 
@@ -65,8 +65,8 @@ export interface ItemSearchResult {
   smart_part_id: string;
   smart_part_name: string | null;
   article: string | null;
-  defect: boolean;
-  defect_note: string | null;
+  condition: string;
+  condition_note: string | null;
   status: string;
   in_stock: boolean;
   passes_filter: boolean;
@@ -118,8 +118,8 @@ export interface StudioAsset {
 
 export interface SuggestedItem {
   item_id: number;
-  defect: boolean;
-  defect_note: string | null;
+  condition: string;
+  condition_note: string | null;
   existing_collage_id: string | null;
 }
 
@@ -140,8 +140,7 @@ export interface TargetGroup {
   id: string;
   name: string;
   owner_kind: "smart_part" | "instance";
-  defect_filter: "with" | "without" | "any";
-  accepts_defects: boolean;
+  condition_filter: "personal" | "defect" | "any";
 }
 
 export interface TransferRules {
@@ -205,7 +204,7 @@ export interface StudioBatchDetail extends StudioBatch {
 
 export interface LookupItem {
   item_id: number;
-  defect: boolean;
-  defect_note: string | null;
+  condition: string;
+  condition_note: string | null;
   existing_collage_id: string | null;
 }

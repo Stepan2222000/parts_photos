@@ -62,7 +62,7 @@ async def validate_owner_exists(kind: str, owner_id: str, group_id: UUID) -> Non
     """Validate that `owner_id` is a real, eligible owner for `group_id`.
 
     No silent fallbacks — every failure is an explicit 422 with a reason. For
-    `instance` eligibility uses the group's `defect_filter` and requires the
+    `instance` eligibility uses the group's `condition_filter` and requires the
     item to be in stock.
     """
     if kind == "smart_part":
@@ -84,7 +84,7 @@ async def validate_owner_exists(kind: str, owner_id: str, group_id: UUID) -> Non
                 422, f"instance owner_id must be an integer item id, got '{owner_id}'"
             )
         item = await pool().fetchrow(
-            "SELECT id, defect, status FROM uchet_ext.items WHERE id = $1", item_id
+            "SELECT id, condition, status FROM uchet_ext.items WHERE id = $1", item_id
         )
         if item is None:
             raise HTTPException(422, f"item {item_id} not found in parts_uchet")
@@ -92,14 +92,7 @@ async def validate_owner_exists(kind: str, owner_id: str, group_id: UUID) -> Non
             raise HTTPException(
                 422, f"item {item_id} status={item['status']!r}, not in_stock"
             )
-        if cfg.defect_filter == "with" and not item["defect"]:
-            raise HTTPException(
-                422, f"item {item_id} is not defective; group requires defect=true"
-            )
-        if cfg.defect_filter == "without" and item["defect"]:
-            raise HTTPException(
-                422, f"item {item_id} is defective; group requires defect=false"
-            )
+        gconfig.assert_item_condition_allowed(item["condition"], group_id)
         return
 
     raise HTTPException(422, f"unknown owner_kind '{kind}'")

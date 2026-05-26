@@ -14,7 +14,7 @@ accordingly:
       "<group_uuid>": {"kind": "smart_part", "existing_collage_id": uuid|null},
       "<group_uuid>": {
         "kind": "instance",
-        "items": [{"item_id": int, "defect": bool, "defect_note": str|null,
+        "items": [{"item_id": int, "condition": str, "condition_note": str|null,
                    "existing_collage_id": uuid|null}]
       }
     }
@@ -53,7 +53,7 @@ WHERE id = $1
 _ITEM_BY_ID = "SELECT id, smart_part_id FROM uchet_ext.items WHERE id = $1"
 
 _ITEMS_FOR_PART = """
-SELECT id, defect, defect_note
+SELECT id, condition, condition_note
 FROM uchet_ext.items
 WHERE smart_part_id = $1 AND status = 'in_stock'
 ORDER BY id ASC
@@ -143,14 +143,12 @@ async def _build_by_group(
         cfg = gconfig.GROUP_SETTINGS[gid]
         bucket: list[dict] = []
         for r in items:
-            if cfg.defect_filter == "with" and not r["defect"]:
-                continue
-            if cfg.defect_filter == "without" and r["defect"]:
+            if cfg.condition_filter != "any" and r["condition"] != cfg.condition_filter:
                 continue
             bucket.append({
                 "item_id": r["id"],
-                "defect": r["defect"],
-                "defect_note": r["defect_note"],
+                "condition": r["condition"],
+                "condition_note": r["condition_note"],
                 "existing_collage_id": instance_existing.get((str(gid), str(r["id"]))),
             })
         by_group[str(gid)] = {"kind": "instance", "items": bucket}
@@ -224,14 +222,12 @@ async def items_for_part(
     existing = {r["owner_id"]: str(r["id"]) for r in rows}
     out: list[dict] = []
     for r in items:
-        if cfg.defect_filter == "with" and not r["defect"]:
-            continue
-        if cfg.defect_filter == "without" and r["defect"]:
+        if cfg.condition_filter != "any" and r["condition"] != cfg.condition_filter:
             continue
         out.append({
             "item_id": r["id"],
-            "defect": r["defect"],
-            "defect_note": r["defect_note"],
+            "condition": r["condition"],
+            "condition_note": r["condition_note"],
             "existing_collage_id": existing.get(str(r["id"])),
         })
     return out
@@ -263,13 +259,13 @@ _PARTS_BY_IDS = (
 )
 
 _ITEMS_FOR_PARTS = """
-SELECT id, smart_part_id, defect, defect_note, status
+SELECT id, smart_part_id, condition, condition_note, status
 FROM uchet_ext.items
 WHERE smart_part_id = ANY($1::text[]) AND status = 'in_stock'
 """
 
 _ITEM_FULL_BY_ID = """
-SELECT id, smart_part_id, defect, defect_note, status
+SELECT id, smart_part_id, condition, condition_note, status
 FROM uchet_ext.items
 WHERE id = $1
 """
@@ -321,7 +317,7 @@ async def search_items(
     joined in one SQL — items and parts are fetched separately and stitched.
 
     - text path (smart-id / name / article): only eligible items
-      (in_stock + passes defect_filter) are returned;
+      (in_stock + passes condition_filter) are returned;
     - id path (q is an integer): the exact item is always returned, flagged with
       `selectable`/`block_reason`, so the UI can show *why* it can't be picked.
     """
@@ -329,12 +325,10 @@ async def search_items(
     if cfg is None:
         return 0, []
 
-    def passes(defect: bool) -> bool:
-        if cfg.defect_filter == "with":
-            return bool(defect)
-        if cfg.defect_filter == "without":
-            return not defect
-        return True
+    def passes(condition: str) -> bool:
+        if cfg.condition_filter == "any":
+            return True
+        return condition == cfg.condition_filter
 
     pattern = f"%{q}%"
     part_rows = await conn.fetch(_PARTS_BY_TEXT, pattern, q, _PART_LIMIT)
@@ -360,7 +354,7 @@ async def search_items(
     # Candidate set: eligible text items + the exact-id item (always).
     candidates: dict[int, dict] = {}
     for it in text_items:
-        if passes(it["defect"]):
+        if passes(it["condition"]):
             candidates[it["id"]] = dict(it)
     if id_item is not None:
         candidates[id_item["id"]] = dict(id_item)
@@ -387,22 +381,25 @@ async def search_items(
         name = part["name"] if part else None
         articles = list(part["articles"] or []) if part else []
         in_stock = it["status"] == "in_stock"
-        pf = passes(it["defect"])
+        pf = passes(it["condition"])
         selectable = in_stock and pf
         block = None
         if not in_stock:
             block = "нет на складе"
         elif not pf:
-            block = ("дефект не подходит для этой группы"
-                     if cfg.defect_filter == "without"
-                     else "нужен дефектный экземпляр")
+            if cfg.condition_filter == "personal":
+                block = "нужен personal"
+            elif cfg.condition_filter == "defect":
+                block = "нужен defect"
+            else:
+                block = "состояние не подходит"
         results.append({
             "item_id": iid,
             "smart_part_id": it["smart_part_id"],
             "smart_part_name": name,
             "article": _best_article(q, articles),
-            "defect": it["defect"],
-            "defect_note": it["defect_note"],
+            "condition": it["condition"],
+            "condition_note": it["condition_note"],
             "status": it["status"],
             "in_stock": in_stock,
             "passes_filter": pf,

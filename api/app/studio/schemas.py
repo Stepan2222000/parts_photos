@@ -25,8 +25,8 @@ class StudioAsset(BaseModel):
 
 class SuggestedItem(BaseModel):
     item_id: int
-    defect: bool
-    defect_note: str | None = None
+    condition: str
+    condition_note: str | None = None
     existing_collage_id: UUID | None = None
 
 
@@ -106,8 +106,8 @@ class TransferRequest(BaseModel):
 
 class LookupItem(BaseModel):
     item_id: int
-    defect: bool
-    defect_note: str | None = None
+    condition: str
+    condition_note: str | None = None
     existing_collage_id: UUID | None = None
 
 
@@ -117,11 +117,11 @@ class ItemSearchResult(BaseModel):
     smart_part_id: str
     smart_part_name: str | None = None
     article: str | None = None       # best-matching article, for the label
-    defect: bool
-    defect_note: str | None = None
+    condition: str
+    condition_note: str | None = None
     status: str
     in_stock: bool
-    passes_filter: bool              # matches the group's defect_filter
+    passes_filter: bool              # matches the group's condition_filter
     selectable: bool                 # in_stock AND passes_filter
     block_reason: str | None = None  # why it can't be picked (if !selectable)
     existing_collage_id: UUID | None = None
@@ -144,8 +144,7 @@ class TargetGroup(BaseModel):
     id: UUID
     name: str
     owner_kind: TargetKind
-    defect_filter: Literal["with", "without", "any"]
-    accepts_defects: bool
+    condition_filter: Literal["personal", "defect", "any"]
 
 
 class TransferRules(BaseModel):

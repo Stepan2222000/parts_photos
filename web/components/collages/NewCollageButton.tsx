@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import type { DefectFilter, OwnerKind } from "@/lib/types";
+import type { ConditionFilter, OwnerKind } from "@/lib/types";
 import CreateCollageDialog from "./CreateCollageDialog";
 
 interface Props {
   groupId: string;
   ownerKind: OwnerKind | null;
-  defectFilter: DefectFilter | null;
+  conditionFilter: ConditionFilter | null;
 }
 
 const BTN: React.CSSProperties = {
@@ -22,7 +22,7 @@ const BTN: React.CSSProperties = {
   fontFamily: "inherit",
 };
 
-export default function NewCollageButton({ groupId, ownerKind, defectFilter }: Props) {
+export default function NewCollageButton({ groupId, ownerKind, conditionFilter }: Props) {
   const [open, setOpen] = useState(false);
 
   // No creation mode for this group (e.g. "Поступления" — track-number owner).
@@ -67,7 +67,7 @@ export default function NewCollageButton({ groupId, ownerKind, defectFilter }: P
         <CreateCollageDialog
           groupId={groupId}
           ownerKind={ownerKind}
-          defectFilter={defectFilter}
+          conditionFilter={conditionFilter}
           onClose={() => setOpen(false)}
         />
       )}

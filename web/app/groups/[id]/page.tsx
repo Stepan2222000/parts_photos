@@ -36,7 +36,7 @@ export default async function GroupPage({ params, searchParams }: Props) {
         <NewCollageButton
           groupId={id}
           ownerKind={active.owner_kind}
-          defectFilter={active.defect_filter}
+          conditionFilter={active.condition_filter}
         />
       }
     >

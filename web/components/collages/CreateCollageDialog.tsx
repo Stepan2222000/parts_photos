@@ -4,7 +4,7 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
-import type { DefectFilter, ItemSearchResult, OwnerKind, OwnerSearchResult } from "@/lib/types";
+import type { ConditionFilter, ItemSearchResult, OwnerKind, OwnerSearchResult } from "@/lib/types";
 import OwnerSearch from "@/components/owners/OwnerSearch";
 import ItemPicker from "./ItemPicker";
 import s from "@/components/shell/Modal.module.css";
@@ -12,11 +12,11 @@ import s from "@/components/shell/Modal.module.css";
 interface Props {
   groupId: string;
   ownerKind: OwnerKind;
-  defectFilter: DefectFilter | null;
+  conditionFilter: ConditionFilter | null;
   onClose: () => void;
 }
 
-export default function CreateCollageDialog({ groupId, ownerKind, defectFilter, onClose }: Props) {
+export default function CreateCollageDialog({ groupId, ownerKind, conditionFilter, onClose }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -109,7 +109,7 @@ export default function CreateCollageDialog({ groupId, ownerKind, defectFilter, 
         ) : (
           <>
             <h2 className={s.title}>Новый коллаж · экземпляр.</h2>
-            <ItemPicker groupId={groupId} defectFilter={defectFilter} busy={busy} onPick={pickItem} />
+            <ItemPicker groupId={groupId} conditionFilter={conditionFilter} busy={busy} onPick={pickItem} />
             {err && <div className={s.error}>{err}</div>}
             <div className={s.actions}>
               <button type="button" className={s.btn} onClick={onClose} disabled={busy}>
