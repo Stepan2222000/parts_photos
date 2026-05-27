@@ -1,11 +1,17 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import type { StudioBatch } from "@/lib/types";
 import s from "./BatchHistory.module.css";
 
 interface Props {
   batches: StudioBatch[];
   activeId: string | null;
+  /** Scroll container the sentinel lives in — IntersectionObserver root. */
+  scrollRootRef: React.RefObject<HTMLElement | null>;
+  hasMore: boolean;
+  loadingMore: boolean;
+  onLoadMore: () => void;
   onSelect: (id: string | null) => void;
   onDelete: (id: string) => Promise<void>;
 }
@@ -13,9 +19,31 @@ interface Props {
 export default function BatchHistory({
   batches,
   activeId,
+  scrollRootRef,
+  hasMore,
+  loadingMore,
+  onLoadMore,
   onSelect,
   onDelete,
 }: Props) {
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  // Fire onLoadMore as the sentinel scrolls into the rail's viewport. Re-armed
+  // on each appended page (batches.length) so it keeps pulling while in view.
+  useEffect(() => {
+    if (!hasMore) return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) onLoadMore();
+      },
+      { root: scrollRootRef.current ?? null, rootMargin: "300px" },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [hasMore, loadingMore, onLoadMore, scrollRootRef, batches.length]);
+
   return (
     <div>
       <button
@@ -73,6 +101,12 @@ export default function BatchHistory({
           );
         })}
       </ul>
+
+      {hasMore && (
+        <div ref={sentinelRef} className={s.sentinel}>
+          {loadingMore ? "Загрузка…" : ""}
+        </div>
+      )}
     </div>
   );
 }

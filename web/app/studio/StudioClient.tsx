@@ -19,6 +19,8 @@ import BatchHistory from "@/components/studio/BatchHistory";
 import BatchView from "@/components/studio/BatchView";
 import s from "./Studio.module.css";
 
+const BATCH_PAGE = 50;
+
 const DEFAULT_OPTIONS: StudioOptions = {
   replace_bg: false,
   improve_lighting: false,
@@ -101,8 +103,11 @@ export default function StudioClient({
   const [error, setError] = useState<string | null>(null);
 
   const [batches, setBatches] = useState<StudioBatch[]>([]);
+  const [hasMoreBatches, setHasMoreBatches] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [activeBatch, setActiveBatch] = useState<StudioBatchDetail | null>(null);
   const [activeBatchId, setActiveBatchId] = useState<string | null>(initialBatchId);
+  const railRef = useRef<HTMLElement>(null);
 
   // ── Load libraries + batches on mount, and pre-fill source if asked ───────
   useEffect(() => {
@@ -141,16 +146,35 @@ export default function StudioClient({
     const [bs, ws, lst] = await Promise.all([
       api.studio.listBackgrounds(),
       api.studio.listWatermarks(),
-      api.studio.listBatches(50),
+      api.studio.listBatches(BATCH_PAGE),
     ]);
     setBackgrounds(bs);
     setWatermarks(ws);
     setBatches(lst);
+    setHasMoreBatches(lst.length === BATCH_PAGE);
     if (activeBatchId) {
       const det = await api.studio.getBatch(activeBatchId);
       setActiveBatch(det);
     }
   }, [activeBatchId]);
+
+  // ── Infinite scroll: append the next page of older batches ────────────────
+  const loadMoreBatches = useCallback(async () => {
+    if (loadingMore || !hasMoreBatches) return;
+    setLoadingMore(true);
+    try {
+      const next = await api.studio.listBatches(BATCH_PAGE, batches.length);
+      const seen = new Set(batches.map((b) => b.id));
+      const fresh = next.filter((b) => !seen.has(b.id));
+      if (fresh.length > 0) setBatches((prev) => [...prev, ...fresh]);
+      // Stop when the page came back short, or brought nothing new (drift guard).
+      setHasMoreBatches(next.length === BATCH_PAGE && fresh.length > 0);
+    } catch (e) {
+      setError(`Не удалось загрузить историю: ${e}`);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, hasMoreBatches, batches]);
 
   // ── Polling for active batch progress ─────────────────────────────────────
   const pollRef = useRef<number | null>(null);
@@ -241,10 +265,14 @@ export default function StudioClient({
 
   return (
     <div className={s.layout}>
-      <aside className={s.rail}>
+      <aside className={s.rail} ref={railRef}>
         <BatchHistory
           batches={batches}
           activeId={activeBatchId}
+          scrollRootRef={railRef}
+          hasMore={hasMoreBatches}
+          loadingMore={loadingMore}
+          onLoadMore={loadMoreBatches}
           onSelect={selectBatch}
           onDelete={async (id) => {
             const transferred = (await api.studio.getBatch(id)).jobs.filter(
