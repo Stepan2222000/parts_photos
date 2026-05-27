@@ -144,7 +144,7 @@ class TargetGroup(BaseModel):
     id: UUID
     name: str
     owner_kind: TargetKind
-    condition_filter: Literal["personal", "defect", "any"]
+    condition_filter: Literal["personal", "defect", "not_defect", "any"]
 
 
 class TransferRules(BaseModel):

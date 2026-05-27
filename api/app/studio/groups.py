@@ -19,7 +19,7 @@ from fastapi import HTTPException
 
 StudioRole = Literal["source", "target", "none"]
 OwnerKind = Literal["smart_part", "instance"]
-ConditionFilter = Literal["personal", "defect", "any"]
+ConditionFilter = Literal["personal", "defect", "not_defect", "any"]
 
 
 @dataclass(frozen=True)
@@ -49,9 +49,9 @@ GROUP_SETTINGS: dict[UUID, GroupConfig] = {
     # Поступления — outside Studio entirely.
     UUID("b66cc603-0bf2-4010-a602-a871f56d3e66"):
         GroupConfig("none", "instance", "any"),
-    # Реальные фотографии — instance, personal-condition, source-only.
+    # Реальные фотографии — instance, source-only; любые НЕ-дефектные (new+personal).
     UUID("721bf726-cdda-4ca8-bf22-f345ca0f677b"):
-        GroupConfig("source", "instance", "personal"),
+        GroupConfig("source", "instance", "not_defect"),
     # Дефектные фотографии — instance, defect-condition, source-only.
     UUID("edce2987-daae-4339-8330-8cb96ad912bf"):
         GroupConfig("source", "instance", "defect"),
@@ -77,6 +77,20 @@ def studio_targets() -> list[UUID]:
     return [gid for gid, cfg in GROUP_SETTINGS.items() if cfg.studio_role == "target"]
 
 
+ALL_CONDITIONS = ("new", "personal", "defect")
+
+
+def condition_allowed(item_condition: str, condition_filter: ConditionFilter) -> bool:
+    """Годится ли состояние экземпляра под фильтр группы. ЕДИНОЕ место правила.
+    any → любое; not_defect → всё кроме defect; personal/defect → точное совпадение.
+    """
+    if condition_filter == "any":
+        return True
+    if condition_filter == "not_defect":
+        return item_condition != "defect"
+    return item_condition == condition_filter
+
+
 def is_transfer_allowed(source_group_id: UUID | None, target_group_id: UUID) -> bool:
     """`source_group_id=None` ↔ fresh upload (no source group)."""
     tgt = GROUP_SETTINGS.get(target_group_id)
@@ -98,7 +112,12 @@ def is_transfer_allowed(source_group_id: UUID | None, target_group_id: UUID) -> 
         if src.condition_filter == "defect" and not tgt.accepts_defect_sources:
             return False
         return True
-    return src.condition_filter == tgt.condition_filter
+    # Иначе перенос разрешён, если есть состояние экземпляра, годное И источнику, И цели
+    # (напр. «Реальные фото» not_defect → «Реальные публ» personal: personal проходит оба).
+    return any(
+        condition_allowed(cnd, src.condition_filter) and condition_allowed(cnd, tgt.condition_filter)
+        for cnd in ALL_CONDITIONS
+    )
 
 
 def assert_item_condition_allowed(item_condition: str, group_id: UUID) -> None:
@@ -111,11 +130,11 @@ def assert_item_condition_allowed(item_condition: str, group_id: UUID) -> None:
     cfg = GROUP_SETTINGS.get(group_id)
     if cfg is None or cfg.owner_kind != "instance":
         return
-    if cfg.condition_filter in ("personal", "defect") and item_condition != cfg.condition_filter:
+    if not condition_allowed(item_condition, cfg.condition_filter):
         raise HTTPException(
             422,
             f"item condition '{item_condition}' не подходит для группы "
-            f"(нужен {cfg.condition_filter})",
+            f"(нужно: {cfg.condition_filter})",
         )
 
 

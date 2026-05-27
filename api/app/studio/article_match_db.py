@@ -143,7 +143,7 @@ async def _build_by_group(
         cfg = gconfig.GROUP_SETTINGS[gid]
         bucket: list[dict] = []
         for r in items:
-            if cfg.condition_filter != "any" and r["condition"] != cfg.condition_filter:
+            if not gconfig.condition_allowed(r["condition"], cfg.condition_filter):
                 continue
             bucket.append({
                 "item_id": r["id"],
@@ -222,7 +222,7 @@ async def items_for_part(
     existing = {r["owner_id"]: str(r["id"]) for r in rows}
     out: list[dict] = []
     for r in items:
-        if cfg.condition_filter != "any" and r["condition"] != cfg.condition_filter:
+        if not gconfig.condition_allowed(r["condition"], cfg.condition_filter):
             continue
         out.append({
             "item_id": r["id"],
@@ -326,9 +326,7 @@ async def search_items(
         return 0, []
 
     def passes(condition: str) -> bool:
-        if cfg.condition_filter == "any":
-            return True
-        return condition == cfg.condition_filter
+        return gconfig.condition_allowed(condition, cfg.condition_filter)
 
     pattern = f"%{q}%"
     part_rows = await conn.fetch(_PARTS_BY_TEXT, pattern, q, _PART_LIMIT)
@@ -391,6 +389,8 @@ async def search_items(
                 block = "нужен personal"
             elif cfg.condition_filter == "defect":
                 block = "нужен defect"
+            elif cfg.condition_filter == "not_defect":
+                block = "дефектные сюда нельзя"
             else:
                 block = "состояние не подходит"
         results.append({

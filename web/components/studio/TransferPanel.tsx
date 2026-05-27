@@ -192,6 +192,7 @@ export default function TransferPanel({ batch, onTransferred }: Props) {
                 {g.owner_kind === "smart_part" && <em className={s.kindChip}>smart</em>}
                 {g.owner_kind === "instance" && g.condition_filter === "defect" && <em className={s.filterChip}>дефектные</em>}
                 {g.owner_kind === "instance" && g.condition_filter === "personal" && <em className={s.filterChip}>personal</em>}
+                {g.owner_kind === "instance" && g.condition_filter === "not_defect" && <em className={s.filterChip}>кроме дефектных</em>}
               </span>
             </button>
           );
