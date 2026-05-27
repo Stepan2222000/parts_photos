@@ -27,13 +27,16 @@ class GroupConfig:
     studio_role: StudioRole
     owner_kind: OwnerKind
     condition_filter: ConditionFilter
+    # Для 'any'-таргетов: принимать ли источники с condition_filter='defect'.
+    # У эталонных = False (референс не делаем из дефектного фото).
+    accepts_defect_sources: bool = True
 
 
 GROUP_SETTINGS: dict[UUID, GroupConfig] = {
     # Эталонные на публикацию — canonical smart_part references; also a Studio
     # target (smart_part-level). No item condition check (smart_part owner).
     UUID("ae697d8d-e803-42c4-9982-ecefbf8a8cdf"):
-        GroupConfig("target", "smart_part", "any"),
+        GroupConfig("target", "smart_part", "any", accepts_defect_sources=False),
     # Реальные на публикацию — instance, only personal-condition items, curated.
     UUID("3cf67240-7597-451a-8ec1-fb097afdeb88"):
         GroupConfig("target", "instance", "personal"),
@@ -90,6 +93,10 @@ def is_transfer_allowed(source_group_id: UUID | None, target_group_id: UUID) -> 
     # source's condition_filter must match the target's exactly — a personal
     # source can't be promoted into a defect-only channel and vice versa.
     if tgt.condition_filter == "any":
+        # 'any' принимает personal/new источники, но таргет может отказывать
+        # дефектным источникам (эталонные: референс не из дефектного фото).
+        if src.condition_filter == "defect" and not tgt.accepts_defect_sources:
+            return False
         return True
     return src.condition_filter == tgt.condition_filter
 
