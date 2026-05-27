@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 import base64
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-from openai import AsyncOpenAI
+from openai import APIStatusError, AsyncOpenAI
+
+logger = logging.getLogger(__name__)
 
 # Standard gpt-image edit sizes, chosen by source orientation. The model honors
 # these exactly; arbitrary WxH is also accepted (divisible by 16, ratio 1:3..3:1)
@@ -12,6 +16,13 @@ from openai import AsyncOpenAI
 SIZE_SQUARE = "1024x1024"
 SIZE_LANDSCAPE = "1536x1024"
 SIZE_PORTRAIT = "1024x1536"
+
+# Transient 5xx from the image gateway (e.g. its "unexpected EOF" 500 when the
+# upstream truncates the response mid-generation) are retried in-process. Rate
+# limits (429) are NOT retried here — they propagate to the worker's adaptive
+# pool, which owns rate-limit backoff.
+TRANSIENT_5XX_RETRIES = 2
+TRANSIENT_5XX_BACKOFF_SECONDS = (3.0, 10.0)
 
 
 class CodexError(RuntimeError):
@@ -49,6 +60,58 @@ def size_for(width: int, height: int) -> str:
     return SIZE_LANDSCAPE if width > height else SIZE_PORTRAIT
 
 
+async def _edit_with_retry(
+    client: AsyncOpenAI,
+    refs: list[Path],
+    *,
+    model: str,
+    prompt: str,
+    size: str,
+    quality: str,
+    timeout_seconds: float,
+):
+    """Call `images.edit`, retrying transient 5xx responses.
+
+    The image gateway occasionally returns a 500 "unexpected EOF" when its
+    upstream truncates the response mid-generation — a one-off infra hiccup, not
+    a client error. Those are retried with a short backoff. Rate limits (429)
+    and other 4xx are re-raised immediately: 429 is owned by the worker's
+    adaptive pool, and 4xx won't succeed on retry.
+    """
+    attempt = 0
+    while True:
+        # Fresh file handles each attempt: the SDK reads them to EOF, so a retry
+        # must re-open them from the start.
+        files = [open(p, "rb") for p in refs]
+        try:
+            return await client.with_options(timeout=timeout_seconds).images.edit(
+                model=model,
+                image=files,
+                prompt=prompt,
+                size=size,
+                quality=quality,
+            )
+        except APIStatusError as e:
+            if not (500 <= e.status_code < 600) or attempt >= TRANSIENT_5XX_RETRIES:
+                raise
+            attempt += 1
+            delay = TRANSIENT_5XX_BACKOFF_SECONDS[
+                min(attempt - 1, len(TRANSIENT_5XX_BACKOFF_SECONDS) - 1)
+            ]
+            logger.warning(
+                "images.edit transient %d (%s); retry %d/%d after %.0fs",
+                e.status_code,
+                str(e)[:200],
+                attempt,
+                TRANSIENT_5XX_RETRIES,
+                delay,
+            )
+            await asyncio.sleep(delay)
+        finally:
+            for f in files:
+                f.close()
+
+
 async def run_codex(
     client: AsyncOpenAI,
     prompt: str,
@@ -74,18 +137,15 @@ async def run_codex(
         raise CodexError("at least one reference image is required")
 
     started = time.monotonic()
-    files = [open(p, "rb") for p in refs]
-    try:
-        resp = await client.with_options(timeout=timeout_seconds).images.edit(
-            model=model,
-            image=files,
-            prompt=prompt,
-            size=size,
-            quality=quality,
-        )
-    finally:
-        for f in files:
-            f.close()
+    resp = await _edit_with_retry(
+        client,
+        refs,
+        model=model,
+        prompt=prompt,
+        size=size,
+        quality=quality,
+        timeout_seconds=timeout_seconds,
+    )
 
     elapsed = time.monotonic() - started
 
