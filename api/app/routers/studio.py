@@ -15,6 +15,7 @@ from ..minio_client import public_url
 from ..models import Photo
 from ..studio import groups as gconfig
 from ..studio.article_match_db import (
+    _build_by_group,
     items_for_part,
     search_items,
     smart_collage_for_part,
@@ -89,15 +90,11 @@ def _row_to_batch(r: dict) -> StudioBatch:
     )
 
 
-def _parse_suggestions(raw) -> JobSuggestions | None:
-    if raw is None:
-        return None
-    if isinstance(raw, str):
-        raw = json.loads(raw)
-    if not isinstance(raw, dict) or not raw.get("smart_part_id"):
-        return None
-    by_group = {}
-    for gid, slot in (raw.get("by_group") or {}).items():
+def _by_group_from_raw(raw_by_group: dict | None) -> dict[str, GroupSuggestion]:
+    """Convert the raw `{gid: slot}` map (stored JSON or fresh `_build_by_group`
+    output — identical shape) into typed GroupSuggestion slots."""
+    by_group: dict[str, GroupSuggestion] = {}
+    for gid, slot in (raw_by_group or {}).items():
         if not isinstance(slot, dict):
             continue
         kind = slot.get("kind")
@@ -111,13 +108,45 @@ def _parse_suggestions(raw) -> JobSuggestions | None:
                 kind="instance",
                 items=[SuggestedItem(**it) for it in (slot.get("items") or [])],
             )
+    return by_group
+
+
+def _parse_suggestions(raw) -> JobSuggestions | None:
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        raw = json.loads(raw)
+    if not isinstance(raw, dict) or not raw.get("smart_part_id"):
+        return None
     return JobSuggestions(
         smart_part_id=raw["smart_part_id"],
         smart_part_name=raw.get("smart_part_name"),
         matched_article=raw.get("matched_article", ""),
         source_kind=raw.get("source_kind", "filename"),
-        by_group=by_group,
+        by_group=_by_group_from_raw(raw.get("by_group")),
     )
+
+
+async def _refresh_suggestions(jobs: list[StudioJob], conn) -> None:
+    """Rebuild each job's by_group placement from current DB state.
+
+    The matched smart_part (frozen at job time) stays; only WHERE it can go —
+    eligible items per group + existing-collage slots — is recomputed live, so
+    condition/collage changes after the batch ran show up immediately. Scoped to
+    the rows TransferPanel can act on (succeeded, not yet transferred); cached
+    per smart_part_id so a batch of jobs sharing a part costs one lookup.
+    """
+    cache: dict[str, dict[str, GroupSuggestion]] = {}
+    for job in jobs:
+        sug = job.suggestions
+        if sug is None:
+            continue
+        if job.status != "succeeded" or job.transferred_to_photo_id is not None:
+            continue
+        spid = sug.smart_part_id
+        if spid not in cache:
+            cache[spid] = _by_group_from_raw(await _build_by_group(spid, conn))
+        sug.by_group = cache[spid]
 
 
 def _row_to_job(
@@ -467,6 +496,7 @@ async def get_batch(batch_id: UUID) -> StudioBatchDetail:
             transferred_key = d.pop("transferred_photo_s3_key", None)
             d.pop("source_collage_id", None)
             jobs.append(_row_to_job(d, transferred_key))
+        await _refresh_suggestions(jobs, conn)
         return StudioBatchDetail(**base.model_dump(), jobs=jobs)
 
 
@@ -501,7 +531,9 @@ async def get_job(job_id: UUID) -> StudioJob:
         d = dict(row)
         transferred_key = d.pop("transferred_photo_s3_key", None)
         d.pop("source_collage_id", None)
-        return _row_to_job(d, transferred_key)
+        job = _row_to_job(d, transferred_key)
+        await _refresh_suggestions([job], conn)
+        return job
 
 
 # ---------------------------------------------------------------------------
