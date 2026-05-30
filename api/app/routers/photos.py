@@ -12,6 +12,7 @@ from ..images import InvalidImage, to_jpeg
 from ..minio_client import public_url, put_jpeg, put_object
 from ..models import Photo, PositionUpdate
 from ..studio import groups as gconfig
+from ..studio.storage import delete_photos_object
 
 logger = logging.getLogger("photos.upload")
 router = APIRouter(tags=["photos"])
@@ -168,15 +169,24 @@ async def upload_photo(collage_id: UUID, file: UploadFile) -> Photo:
 
 @router.delete("/photos/{photo_id}", status_code=204)
 async def soft_delete_photo(photo_id: UUID) -> None:
-    res = await pool().execute(
+    row = await pool().fetchrow(
         """
         UPDATE photos SET state = 'deleted', deleted_at = now()
         WHERE id = $1 AND state <> 'deleted'
+        RETURNING mime, s3_key
         """,
         photo_id,
     )
-    if res.endswith(" 0"):
+    if row is None:
         raise HTTPException(404, "Photo not found or already deleted")
+    # Images keep soft-delete semantics (the object is retained in S3). Videos
+    # are large and never published, so deleting one also removes its objects
+    # from S3 — both the result mp4 and, if it was still transcoding, the
+    # original `.src`. Best-effort: a missing object (e.g. a failed transcode
+    # whose original was already dropped) is a harmless no-op.
+    if (row["mime"] or "").startswith("video/"):
+        delete_photos_object(row["s3_key"])
+        delete_photos_object(video.orig_key_for(row["s3_key"]))
 
 
 @router.post("/photos/{photo_id}/retry", response_model=Photo)

@@ -325,7 +325,12 @@ export default function PhotosGrid({ collageId, groupId, ownerId, photos: initia
   }
 
   async function onDelete(id: string) {
-    if (!confirm("Удалить фото? Soft-delete, файл останется в S3.")) return;
+    const target = photos.find((p) => p.id === id);
+    const msg =
+      target && isVideo(target)
+        ? "Удалить видео? Файл будет удалён из хранилища."
+        : "Удалить фото? Soft-delete, файл останется в S3.";
+    if (!confirm(msg)) return;
     await api.photos.delete(id);
     setPhotos((curr) => curr.filter((p) => p.id !== id));
     router.refresh();
