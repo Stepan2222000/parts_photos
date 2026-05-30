@@ -30,6 +30,7 @@ import asyncio
 import logging
 import os
 import tempfile
+from pathlib import Path
 from uuid import UUID
 
 from .config import settings
@@ -124,7 +125,7 @@ async def transcode_video(photo_id: UUID) -> None:
         out = os.path.join(tmp, "out.mp4")
 
         await asyncio.to_thread(
-            fetch_to, orig_key, src, bucket=settings.minio_bucket
+            fetch_to, orig_key, Path(src), bucket=settings.minio_bucket
         )
 
         vcodec = await _probe_codec(src, "v:0")
