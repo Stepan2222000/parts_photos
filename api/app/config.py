@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     studio_max_source_bytes: int = 25 * 1024 * 1024  # gpt-image-2 hard limit
     studio_image_timeout_seconds: int = 15 * 60
 
+    # Video uploads (only into source photo groups). Originals are transcoded to
+    # web-playable mp4 (H.264/AAC, +faststart) in a background task.
+    max_video_bytes: int = 200 * 1024 * 1024
+    video_transcode_concurrency: int = 2
+    ffmpeg_bin: str = "ffmpeg"
+    ffprobe_bin: str = "ffprobe"
+
     # Studio image-edit backend (OpenAI-compatible /images/edits endpoint)
     studio_openai_base_url: str = "https://api.openai.com/v1"
     studio_openai_api_key: str = ""

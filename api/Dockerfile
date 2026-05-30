@@ -4,6 +4,11 @@ FROM python:3.13-slim
 # /images/edits endpoint (see app/studio/worker.py) — no external CLI needed.
 WORKDIR /app
 
+# ffmpeg/ffprobe: normalize uploaded video to web-playable mp4 (see app/video.py).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \

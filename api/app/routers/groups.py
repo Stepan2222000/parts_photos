@@ -47,7 +47,12 @@ async def list_groups() -> list[Group]:
     out: list[Group] = []
     for r in rows:
         owner_kind, condition_filter = _creation_mode(r["id"])
-        out.append(Group(**dict(r), owner_kind=owner_kind, condition_filter=condition_filter))
+        out.append(Group(
+            **dict(r),
+            owner_kind=owner_kind,
+            condition_filter=condition_filter,
+            allows_video=gconfig.allows_video(r["id"]),
+        ))
     return out
 
 

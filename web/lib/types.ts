@@ -16,6 +16,8 @@ export interface Group {
   // studio_role=none like "Поступления").
   owner_kind: OwnerKind | null;
   condition_filter: ConditionFilter | null;
+  // Whether this group accepts video uploads (only source photo groups do).
+  allows_video: boolean;
 }
 
 export interface Collage {
@@ -45,6 +47,10 @@ export interface Photo {
   state: PhotoState;
   uploaded_at: string | null;
   created_at: string;
+}
+
+export function isVideo(photo: Pick<Photo, "mime">): boolean {
+  return photo.mime.startsWith("video/");
 }
 
 export interface CollageDetail {

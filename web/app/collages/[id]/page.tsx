@@ -3,6 +3,7 @@ import OwnerCard from "@/components/owners/OwnerCard";
 import PhotosGrid from "@/components/photos/PhotosGrid";
 import Uploader from "@/components/upload/Uploader";
 import { api } from "@/lib/api";
+import { isVideo } from "@/lib/types";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -15,8 +16,13 @@ export default async function CollagePage({ params }: Props) {
     api.collages.get(id),
   ]);
 
+  const allowsVideo = groups.find((g) => g.id === collage.group_id)?.allows_video ?? false;
+  const imageCount = collage.photos.filter(
+    (p) => p.state === "uploaded" && !isVideo(p),
+  ).length;
+
   const firstPhotoUrl =
-    collage.photos.find((p) => p.state === "uploaded")?.url ?? null;
+    collage.photos.find((p) => p.state === "uploaded" && !isVideo(p))?.url ?? null;
 
   return (
     <Shell
@@ -49,7 +55,7 @@ export default async function CollagePage({ params }: Props) {
         <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
           <h2 className="display display-sm">Photos.</h2>
           <span style={{ color: "var(--text-muted)", fontSize: 13.5 }}>
-            {collage.photos.filter((p) => p.state === "uploaded").length} фото
+            {imageCount} фото
           </span>
         </div>
       </div>
@@ -60,7 +66,7 @@ export default async function CollagePage({ params }: Props) {
         ownerId={collage.owner_id}
         photos={collage.photos}
       />
-      <Uploader collageId={collage.id} />
+      <Uploader collageId={collage.id} allowsVideo={allowsVideo} />
     </Shell>
   );
 }

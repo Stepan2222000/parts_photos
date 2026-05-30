@@ -141,6 +141,7 @@ async def _query_collages(
         LEFT JOIN LATERAL (
             SELECT s3_key FROM photos
             WHERE collage_id = c.id AND state = 'uploaded'
+              AND mime NOT LIKE 'video/%'
             ORDER BY position ASC
             LIMIT 1
         ) first_photo ON true
@@ -252,7 +253,9 @@ async def get_collage(collage_id: UUID) -> CollageDetail:
         SELECT id, collage_id, position, s3_key, mime, size_bytes,
                state, uploaded_at, created_at
         FROM photos
-        WHERE collage_id = $1 AND state IN ('uploaded', 'failed')
+        WHERE collage_id = $1
+          AND (state IN ('uploaded', 'failed')
+               OR (state = 'pending' AND mime LIKE 'video/%'))
         ORDER BY position ASC
         """,
         collage_id,
@@ -352,7 +355,7 @@ async def transfer_collage_photos(
             # and be uploaded. Guards double-submit and concurrent moves.
             rows = await conn.fetch(
                 """
-                SELECT id, s3_key FROM photos
+                SELECT id, s3_key, mime FROM photos
                 WHERE id = ANY($1::uuid[]) AND collage_id = $2 AND state = 'uploaded'
                 """,
                 photo_ids, collage_id,
@@ -364,6 +367,11 @@ async def transfer_collage_photos(
                     409,
                     "Photos not in this collage / not uploaded (already moved?): "
                     + ", ".join(missing),
+                )
+            videos = [str(r["id"]) for r in rows if (r["mime"] or "").startswith("video/")]
+            if videos:
+                raise HTTPException(
+                    400, "Видео нельзя переносить на публикацию: " + ", ".join(videos)
                 )
 
             target = await conn.fetchrow(

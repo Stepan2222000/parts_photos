@@ -22,11 +22,13 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 import type { MoveTarget, Photo } from "@/lib/types";
+import { isVideo } from "@/lib/types";
 import { api, ApiError } from "@/lib/api";
 import { downloadFile, photoFilename } from "@/lib/download";
 import { copyImageToClipboard } from "@/lib/clipboard";
 import Lightbox from "./Lightbox";
 import TransferDialog from "./TransferDialog";
+import VideoPanel from "./VideoPanel";
 import s from "./PhotosGrid.module.css";
 
 function CopyIcon() {
@@ -272,6 +274,15 @@ export default function PhotosGrid({ collageId, groupId, ownerId, photos: initia
     });
   }, [initialPhotos]);
 
+  // While a video is still transcoding, refresh so its state flips to
+  // "готово"/"ошибка" without a manual reload.
+  const hasPendingVideo = photos.some((p) => isVideo(p) && p.state === "pending");
+  useEffect(() => {
+    if (!hasPendingVideo) return;
+    const t = setInterval(() => router.refresh(), 3000);
+    return () => clearInterval(t);
+  }, [hasPendingVideo, router]);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 6 } }),
@@ -281,12 +292,17 @@ export default function PhotosGrid({ collageId, groupId, ownerId, photos: initia
   async function onDragEnd(e: DragEndEvent) {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
-    const oldIndex = photos.findIndex((p) => p.id === active.id);
-    const newIndex = photos.findIndex((p) => p.id === over.id);
+    // Only images are sortable. Reorder within the image subset, then append
+    // videos so the payload still covers every alive photo (the reorder
+    // endpoint rejects a partial list with 409).
+    const imgs = photos.filter((p) => !isVideo(p));
+    const vids = photos.filter((p) => isVideo(p));
+    const oldIndex = imgs.findIndex((p) => p.id === active.id);
+    const newIndex = imgs.findIndex((p) => p.id === over.id);
     if (oldIndex < 0 || newIndex < 0) return;
 
     const prev = photos;
-    const next = arrayMove(photos, oldIndex, newIndex).map((p, i) => ({
+    const next = [...arrayMove(imgs, oldIndex, newIndex), ...vids].map((p, i) => ({
       ...p,
       position: i + 1,
     }));
@@ -315,6 +331,9 @@ export default function PhotosGrid({ collageId, groupId, ownerId, photos: initia
     router.refresh();
   }
 
+  const imagePhotos = photos.filter((p) => !isVideo(p));
+  const videoPhotos = photos.filter((p) => isVideo(p));
+
   if (photos.length === 0) {
     return (
       <div style={{ marginTop: 18, color: "var(--text-muted)" }}>
@@ -323,7 +342,7 @@ export default function PhotosGrid({ collageId, groupId, ownerId, photos: initia
     );
   }
 
-  const uploaded = photos.filter((p) => p.state === "uploaded");
+  const uploaded = imagePhotos.filter((p) => p.state === "uploaded");
 
   function openLightbox(photoId: string) {
     const i = uploaded.findIndex((p) => p.id === photoId);
@@ -372,7 +391,7 @@ export default function PhotosGrid({ collageId, groupId, ownerId, photos: initia
 
   return (
     <>
-      {selectMode ? (
+      {imagePhotos.length > 0 && (selectMode ? (
         <div className={s.selectBar}>
           <span className={s.selectCount}>Выбрано {selected.size}</span>
           <div className={s.selectBarBtns}>
@@ -426,28 +445,32 @@ export default function PhotosGrid({ collageId, groupId, ownerId, photos: initia
             </button>
           )}
         </div>
+      ))}
+
+      {imagePhotos.length > 0 && (
+        <DndContext id={dndId} sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+          <SortableContext items={imagePhotos.map((p) => p.id)} strategy={rectSortingStrategy}>
+            <div className={s.grid}>
+              {imagePhotos.map((p, i) => (
+                <Tile
+                  key={p.id}
+                  photo={p}
+                  position={i + 1}
+                  collageId={collageId}
+                  ownerId={ownerId}
+                  selectMode={selectMode}
+                  isSelected={selected.has(p.id)}
+                  onToggleSelect={toggleSelect}
+                  onDelete={onDelete}
+                  onOpen={openLightbox}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       )}
 
-      <DndContext id={dndId} sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-        <SortableContext items={photos.map((p) => p.id)} strategy={rectSortingStrategy}>
-          <div className={s.grid}>
-            {photos.map((p, i) => (
-              <Tile
-                key={p.id}
-                photo={p}
-                position={i + 1}
-                collageId={collageId}
-                ownerId={ownerId}
-                selectMode={selectMode}
-                isSelected={selected.has(p.id)}
-                onToggleSelect={toggleSelect}
-                onDelete={onDelete}
-                onOpen={openLightbox}
-              />
-            ))}
-          </div>
-        </SortableContext>
-      </DndContext>
+      <VideoPanel videos={videoPhotos} ownerId={ownerId} onDelete={onDelete} />
       {lightboxIndex !== null && (
         <Lightbox
           photos={uploaded}

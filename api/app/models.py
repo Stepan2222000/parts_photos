@@ -26,6 +26,8 @@ class Group(BaseModel):
     # "Поступления"). The frontend disables "New collage" in that case.
     owner_kind: OwnerKind | None = None
     condition_filter: ConditionFilter | None = None
+    # Whether this group accepts video uploads (only the source photo groups do).
+    allows_video: bool = False
 
 
 class GroupPositionUpdate(BaseModel):

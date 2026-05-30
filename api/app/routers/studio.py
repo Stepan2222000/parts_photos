@@ -379,7 +379,7 @@ async def create_batch(
             if photo_ids:
                 rows = await conn.fetch(
                     """
-                    SELECT id, s3_key
+                    SELECT id, s3_key, mime
                     FROM photos
                     WHERE id = ANY($1::uuid[]) AND state = 'uploaded'
                     """,
@@ -391,6 +391,11 @@ async def create_batch(
                     raise HTTPException(
                         404,
                         f"Photos not found or not uploaded: {', '.join(missing)}",
+                    )
+                videos = [str(r["id"]) for r in rows if (r["mime"] or "").startswith("video/")]
+                if videos:
+                    raise HTTPException(
+                        400, f"Видео нельзя апгрейдить в Studio: {', '.join(videos)}"
                     )
                 for r in rows:
                     collage_photos.append((r["id"], r["s3_key"], None))

@@ -5,13 +5,86 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, HTTPException, UploadFile
 
+from .. import video
+from ..config import settings
 from ..db import pool
 from ..images import InvalidImage, to_jpeg
-from ..minio_client import public_url, put_jpeg
+from ..minio_client import public_url, put_jpeg, put_object
 from ..models import Photo, PositionUpdate
+from ..studio import groups as gconfig
 
 logger = logging.getLogger("photos.upload")
 router = APIRouter(tags=["photos"])
+
+
+async def _insert_pending_video(
+    collage_id: UUID, photo_id: UUID, s3_key: str, size_bytes: int
+) -> dict:
+    """Insert a state='pending' video row with a serialized position (same
+    advisory-lock pattern as image uploads). Returns the inserted row."""
+    async with pool().acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+                str(collage_id),
+            )
+            return await conn.fetchrow(
+                """
+                INSERT INTO photos (id, collage_id, position, s3_key, mime, size_bytes, state)
+                VALUES (
+                    $1, $2,
+                    COALESCE((SELECT MAX(position) + 1 FROM photos
+                              WHERE collage_id = $2 AND state <> 'deleted'), 1),
+                    $3, 'video/mp4', $4, 'pending'
+                )
+                RETURNING id, collage_id, position, s3_key, mime, size_bytes,
+                          state, uploaded_at, created_at
+                """,
+                photo_id, collage_id, s3_key, size_bytes,
+            )
+
+
+async def _upload_video(collage_id: UUID, group_id: UUID, file: UploadFile) -> Photo:
+    """Accept a video into a source photo group: store the original, insert a
+    pending row, kick off a background transcode to web-playable mp4."""
+    if not gconfig.allows_video(group_id):
+        raise HTTPException(415, "Видео можно загружать только в реальные и дефектные фото")
+
+    declared = getattr(file, "size", None)
+    if declared and declared > settings.max_video_bytes:
+        raise HTTPException(
+            413, f"Видео {declared} байт превышает лимит {settings.max_video_bytes}"
+        )
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "Empty file")
+    if len(raw) > settings.max_video_bytes:
+        raise HTTPException(
+            413, f"Видео {len(raw)} байт превышает лимит {settings.max_video_bytes}"
+        )
+
+    photo_id = uuid4()
+    final_key = f"groups/{group_id}/collages/{collage_id}/{photo_id}.mp4"
+    orig_key = video.orig_key_for(final_key)
+    await _insert_pending_video(collage_id, photo_id, final_key, len(raw))
+
+    try:
+        put_object(settings.minio_bucket, orig_key, raw, "application/octet-stream")
+    except Exception as e:
+        await pool().execute("UPDATE photos SET state = 'failed' WHERE id = $1", photo_id)
+        raise HTTPException(500, f"MinIO upload failed: {e}") from e
+
+    video.schedule_transcode(photo_id)
+    final = await pool().fetchrow(
+        """
+        SELECT id, collage_id, position, s3_key, mime, size_bytes,
+               state, uploaded_at, created_at
+        FROM photos WHERE id = $1
+        """,
+        photo_id,
+    )
+    return Photo(**dict(final), url=public_url(final["s3_key"]))
 
 
 @router.post("/collages/{collage_id}/photos", response_model=Photo, status_code=201)
@@ -22,6 +95,9 @@ async def upload_photo(collage_id: UUID, file: UploadFile) -> Photo:
     if head is None:
         raise HTTPException(404, "Collage not found")
     group_id: UUID = head["group_id"]
+
+    if video.is_video_upload(file.content_type, file.filename):
+        return await _upload_video(collage_id, group_id, file)
 
     raw = await file.read()
     if not raw:

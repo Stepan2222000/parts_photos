@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from . import video
 from .config import settings
 from .db import close_pool, init_pool
 from .routers import collages, groups, owners, photos, studio
@@ -16,6 +17,8 @@ from .studio.storage import ensure_bucket as ensure_studio_bucket
 async def lifespan(app: FastAPI):
     await init_pool()
     await asyncio.to_thread(ensure_studio_bucket)
+    # Re-launch any video transcode left pending by a previous process.
+    await video.reconcile_pending()
     try:
         yield
     finally:

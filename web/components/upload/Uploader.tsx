@@ -15,11 +15,12 @@ interface QueueItem {
 
 interface Props {
   collageId: string;
+  allowsVideo?: boolean;
 }
 
 const MAX_PARALLEL = 4;
 
-export default function Uploader({ collageId }: Props) {
+export default function Uploader({ collageId, allowsVideo = false }: Props) {
   const router = useRouter();
   const search = useSearchParams();
   const [over, setOver] = useState(false);
@@ -96,9 +97,11 @@ export default function Uploader({ collageId }: Props) {
           if (e.dataTransfer.files.length) enqueue(e.dataTransfer.files);
         }}
       >
-        <div className={s.title}>Перетащи фото сюда.</div>
+        <div className={s.title}>Перетащи {allowsVideo ? "фото или видео" : "фото"} сюда.</div>
         <div className={s.sub}>
-          Принимаем jpg, png, heic. HEIC конвертируется в JPEG. Параллельно ≤ {MAX_PARALLEL} файлов.
+          Принимаем jpg, png, heic. HEIC конвертируется в JPEG.
+          {allowsVideo && " Видео (mp4, mov…) перекодируется в mp4 для онлайн-просмотра."}
+          {" "}Параллельно ≤ {MAX_PARALLEL} файлов.
         </div>
         <div className={s.row}>
           <label className={s.btn}>
@@ -111,7 +114,7 @@ export default function Uploader({ collageId }: Props) {
             <input
               ref={fileRef}
               type="file"
-              accept="image/*,.heic,.heif"
+              accept={allowsVideo ? "image/*,.heic,.heif,video/*" : "image/*,.heic,.heif"}
               multiple
               onChange={(e) => {
                 if (e.target.files) enqueue(e.target.files);

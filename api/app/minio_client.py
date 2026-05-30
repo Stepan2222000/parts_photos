@@ -38,6 +38,12 @@ def put_jpeg(s3_key: str, data: bytes) -> None:
     put_object(settings.minio_bucket, s3_key, data, "image/jpeg")
 
 
+def put_file(bucket: str, s3_key: str, path: str, content_type: str) -> None:
+    """Stream a local file into a bucket without loading it into memory.
+    Used for transcoded video (potentially hundreds of MB)."""
+    client().fput_object(bucket, s3_key, path, content_type=content_type)
+
+
 def public_url(s3_key: str, bucket: str | None = None) -> str:
     if bucket is None or bucket == settings.minio_bucket:
         return f"{settings.minio_public_base}/{s3_key}"

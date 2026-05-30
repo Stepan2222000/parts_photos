@@ -30,6 +30,9 @@ class GroupConfig:
     # Для 'any'-таргетов: принимать ли источники с condition_filter='defect'.
     # У эталонных = False (референс не делаем из дефектного фото).
     accepts_defect_sources: bool = True
+    # Принимает ли группа загрузку видео. Только source-группы реальных/дефектных
+    # фото — публикационные каналы и «Поступления» видео не принимают.
+    allows_video: bool = False
 
 
 GROUP_SETTINGS: dict[UUID, GroupConfig] = {
@@ -50,11 +53,12 @@ GROUP_SETTINGS: dict[UUID, GroupConfig] = {
     UUID("b66cc603-0bf2-4010-a602-a871f56d3e66"):
         GroupConfig("none", "instance", "any"),
     # Реальные фотографии — instance, source-only; любые НЕ-дефектные (new+personal).
+    # Единственные (вместе с «Дефектными»), куда можно грузить видео.
     UUID("721bf726-cdda-4ca8-bf22-f345ca0f677b"):
-        GroupConfig("source", "instance", "not_defect"),
+        GroupConfig("source", "instance", "not_defect", allows_video=True),
     # Дефектные фотографии — instance, defect-condition, source-only.
     UUID("edce2987-daae-4339-8330-8cb96ad912bf"):
-        GroupConfig("source", "instance", "defect"),
+        GroupConfig("source", "instance", "defect", allows_video=True),
 }
 
 # Convenient aliases used in matching/UI.
@@ -71,6 +75,13 @@ GROUP_NAMES: dict[UUID, str] = {
 
 def get(group_id: UUID) -> GroupConfig | None:
     return GROUP_SETTINGS.get(group_id)
+
+
+def allows_video(group_id: UUID) -> bool:
+    """Можно ли грузить видео в группу. True только для source-групп
+    реальных/дефектных фото."""
+    cfg = GROUP_SETTINGS.get(group_id)
+    return bool(cfg and cfg.allows_video)
 
 
 def studio_targets() -> list[UUID]:
