@@ -12,6 +12,8 @@ interface SP {
   from_collage?: string;
   target_collage_id?: string;
   batch?: string;
+  // Set by «Пробелы фото»: read pre-picked sources from sessionStorage.
+  prefill?: string;
 }
 
 export default async function StudioPage({
@@ -37,6 +39,7 @@ export default async function StudioPage({
         initialSourcePhotoIds={sourcePhotoIds}
         initialSourceCollageId={sp.from_collage ?? sp.target_collage_id ?? null}
         initialBatchId={sp.batch ?? null}
+        initialPrefill={sp.prefill === "1"}
       />
     </Shell>
   );

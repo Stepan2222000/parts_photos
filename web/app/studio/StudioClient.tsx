@@ -41,6 +41,9 @@ interface Props {
    *  does NOT preselect a transfer target. */
   initialSourceCollageId: string | null;
   initialBatchId: string | null;
+  /** Read pre-picked sources from sessionStorage('studio_prefill') — used by
+   *  «Пробелы фото», where the selection can span several collages. */
+  initialPrefill?: boolean;
 }
 
 // Same-shape detection so polling doesn't kick a referentially-fresh object
@@ -85,6 +88,7 @@ export default function StudioClient({
   initialSourcePhotoIds,
   initialSourceCollageId,
   initialBatchId,
+  initialPrefill = false,
 }: Props) {
   const router = useRouter();
 
@@ -112,6 +116,36 @@ export default function StudioClient({
   // ── Load libraries + batches on mount, and pre-fill source if asked ───────
   useEffect(() => {
     void refreshAll();
+
+    // «Пробелы фото»: предвыбранные фото (возможно из разных коллажей) лежат в
+    // sessionStorage, т.к. их много и они мультиколлажные. Забираем и чистим.
+    if (initialPrefill && typeof window !== "undefined") {
+      try {
+        const raw = window.sessionStorage.getItem("studio_prefill");
+        window.sessionStorage.removeItem("studio_prefill");
+        if (raw) {
+          const items = JSON.parse(raw) as {
+            id: string;
+            url: string;
+            collageId: string;
+            label: string;
+          }[];
+          setCollagePhotos(
+            items.map((p) => ({
+              id: p.id,
+              url: p.url,
+              collageId: p.collageId,
+              collageOwnerId: p.label,
+            })),
+          );
+          if (items.length) setDefaultBatchName(`Пробелы · ${items[0].label}`);
+        }
+      } catch {
+        /* ignore malformed prefill */
+      }
+      return; // prefill path is exclusive of the collage quick-action below
+    }
+
     // Quick-action из коллажа: ?source_photo_ids=a,b,c&from_collage=X — тянем
     // выбранные фото-источники одним fetch'ем коллажа, чтобы пользователь сразу
     // видел превью. (Коллаж здесь — источник фоток; куда положить результат

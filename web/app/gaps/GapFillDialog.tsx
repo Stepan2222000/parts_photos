@@ -147,8 +147,26 @@ export default function GapFillDialog({ gap, onClose, onFilled }: Props) {
 
   function doUpgrade() {
     if (selected.size === 0) return;
-    const ids = [...selected].map(encodeURIComponent).join(",");
-    router.push(`/studio?source_photo_ids=${ids}`);
+    // The selection can span several collages (e.g. real photos of different
+    // instances for one reference), which the URL quick-action can't express —
+    // hand the picked photos to Studio via sessionStorage.
+    const byId = new Map<string, Pick>();
+    for (const p of [...realPicks, ...freePicks, ...manual]) byId.set(p.photo.id, p);
+    const payload = [...selected]
+      .map((id) => byId.get(id))
+      .filter((p): p is Pick => !!p)
+      .map((p) => ({
+        id: p.photo.id,
+        url: p.photo.url,
+        collageId: p.photo.collage_id,
+        label: p.label,
+      }));
+    try {
+      window.sessionStorage.setItem("studio_prefill", JSON.stringify(payload));
+    } catch {
+      /* ignore quota errors — Studio will just open empty */
+    }
+    router.push("/studio?prefill=1");
   }
 
   const targetIsPub = gap.kind !== "reference";
