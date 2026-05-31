@@ -18,13 +18,19 @@ export interface Group {
   condition_filter: ConditionFilter | null;
   // Whether this group accepts video uploads (only source photo groups do).
   allows_video: boolean;
+  // Free-form library ("Свободные коллажи"): smart binding optional (a label),
+  // collage carries a required free-text title.
+  owner_optional: boolean;
+  title_required: boolean;
 }
 
 export interface Collage {
   id: string;
   group_id: string;
-  owner_kind: OwnerKind;
-  owner_id: string;
+  // null for unbound library collages (no smart link).
+  owner_kind: OwnerKind | null;
+  owner_id: string | null;
+  title?: string | null;
   created_at: string;
   photos_count: number;
   first_photo_url: string | null;
@@ -57,8 +63,9 @@ export interface CollageDetail {
   id: string;
   group_id: string;
   group_name: string;
-  owner_kind: OwnerKind;
-  owner_id: string;
+  owner_kind: OwnerKind | null;
+  owner_id: string | null;
+  title?: string | null;
   owner_name: string | null;
   owner_articles: string[];
   owner_condition?: string | null;

@@ -106,6 +106,7 @@ async def _query_collages(
         i = len(params)
         where.append(
             f"(c.owner_id ILIKE ${i} "
+            f"OR c.title ILIKE ${i} "
             f"OR p_meta.name ILIKE ${i} "
             f"OR EXISTS (SELECT 1 FROM unnest(p_meta.articles) a WHERE a ILIKE ${i}))"
         )
@@ -127,7 +128,7 @@ async def _query_collages(
     params.append(limit)
     sql = f"""
         SELECT
-            c.id, c.group_id, c.owner_kind, c.owner_id, c.created_at,
+            c.id, c.group_id, c.owner_kind, c.owner_id, c.title, c.created_at,
             g.name          AS group_name,
             p_meta.name     AS owner_name,
             p_meta.articles AS owner_articles,
@@ -148,6 +149,8 @@ async def _query_collages(
         {where_sql}
         GROUP BY c.id, g.name, p_meta.name, p_meta.articles, first_photo.s3_key
         {having}
+        -- c.title/c.owner_kind/c.owner_id are functionally dependent on c.id (PK),
+        -- so they need no explicit GROUP BY entry.
         ORDER BY {order}
         LIMIT ${len(params)}
     """
@@ -159,6 +162,7 @@ async def _query_collages(
             group_id=r["group_id"],
             owner_kind=r["owner_kind"],
             owner_id=r["owner_id"],
+            title=r["title"],
             created_at=r["created_at"],
             photos_count=r["photos_count"],
             first_photo_url=public_url(r["first_key"]) if r["first_key"] else None,
@@ -201,23 +205,36 @@ async def create_collage(payload: CollageCreate) -> Collage:
     cfg = gconfig.get(payload.group_id)
     if cfg is None or cfg.studio_role == "none":
         raise HTTPException(422, "group is not configured for collage creation")
-    if payload.owner_kind != cfg.owner_kind:
-        raise HTTPException(
-            422,
-            f"group expects owner_kind={cfg.owner_kind!r}, "
-            f"got {payload.owner_kind!r}",
-        )
 
-    await validate_owner_exists(payload.owner_kind, payload.owner_id, payload.group_id)
+    title = payload.title.strip() if payload.title else None
+    if cfg.title_required and not title:
+        raise HTTPException(422, "title is required for this group")
+
+    owner_kind = payload.owner_kind
+    owner_id = payload.owner_id
+    # Free-form library: smart binding is optional. Omitting the owner is fine;
+    # if one is given it must still be the group's owner_kind and a real smart.
+    if cfg.owner_optional and not owner_id:
+        owner_kind = None
+        owner_id = None
+    else:
+        if owner_kind != cfg.owner_kind:
+            raise HTTPException(
+                422,
+                f"group expects owner_kind={cfg.owner_kind!r}, got {owner_kind!r}",
+            )
+        if not owner_id:
+            raise HTTPException(422, "owner_id is required for this group")
+        await validate_owner_exists(owner_kind, owner_id, payload.group_id)
 
     try:
         row = await pool().fetchrow(
             """
-            INSERT INTO photo_collages (group_id, owner_kind, owner_id)
-            VALUES ($1, $2, $3)
-            RETURNING id, group_id, owner_kind, owner_id, created_at
+            INSERT INTO photo_collages (group_id, owner_kind, owner_id, title)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id, group_id, owner_kind, owner_id, title, created_at
             """,
-            payload.group_id, payload.owner_kind, payload.owner_id,
+            payload.group_id, owner_kind, owner_id, title,
         )
     except Exception as e:
         raise HTTPException(
@@ -233,7 +250,7 @@ async def get_collage(collage_id: UUID) -> CollageDetail:
     head = await pool().fetchrow(
         """
         SELECT
-            c.id, c.group_id, c.owner_kind, c.owner_id,
+            c.id, c.group_id, c.owner_kind, c.owner_id, c.title,
             g.name AS group_name,
             p_meta.name     AS owner_name,
             p_meta.articles AS owner_articles
@@ -270,6 +287,7 @@ async def get_collage(collage_id: UUID) -> CollageDetail:
         group_name=head["group_name"],
         owner_kind=head["owner_kind"],
         owner_id=head["owner_id"],
+        title=head["title"],
         owner_name=head["owner_name"],
         owner_articles=list(head["owner_articles"] or []),
         photos=photos,

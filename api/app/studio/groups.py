@@ -33,6 +33,17 @@ class GroupConfig:
     # Принимает ли группа загрузку видео. Только source-группы реальных/дефектных
     # фото — публикационные каналы и «Поступления» видео не принимают.
     allows_video: bool = False
+    # Свободная библиотека («Свободные коллажи»): привязка к smart НЕОБЯЗАТЕЛЬНА
+    # (owner_optional) — это просто метка «что за запчасть», а не личность
+    # коллажа. Вместо владельца коллаж опознаётся по обязательному title
+    # (title_required). Уникальность (group, owner) на эту группу не действует
+    # (см. partial-index в migration_006) — на один smart можно много коллажей.
+    owner_optional: bool = False
+    title_required: bool = False
+
+
+# Фиксированный id свободной библиотеки (см. migration_006_library_collages.sql).
+LIBRARY_GROUP_ID = UUID("0a7fbbdf-e605-48f1-a320-ca2094a0f32c")
 
 
 GROUP_SETTINGS: dict[UUID, GroupConfig] = {
@@ -59,6 +70,17 @@ GROUP_SETTINGS: dict[UUID, GroupConfig] = {
     # Дефектные фотографии — instance, defect-condition, source-only.
     UUID("edce2987-daae-4339-8330-8cb96ad912bf"):
         GroupConfig("source", "instance", "defect", allows_video=True),
+    # Свободные коллажи — свободная библиотека. Источник для Studio (апгрейд,
+    # замена фона), откуда результат можно перенести В ЛЮБОЙ канал (эталонные/
+    # реальные/дефектные/Avito) — владелец цели выбирается в момент переноса.
+    # owner_kind='smart_part', но привязка к smart необязательна (метка), title
+    # обязателен, видео разрешено, много коллажей на один/без smart.
+    LIBRARY_GROUP_ID:
+        GroupConfig(
+            "source", "smart_part", "any",
+            accepts_defect_sources=True, allows_video=True,
+            owner_optional=True, title_required=True,
+        ),
 }
 
 # Convenient aliases used in matching/UI.
@@ -70,11 +92,21 @@ GROUP_NAMES: dict[UUID, str] = {
     UUID("b66cc603-0bf2-4010-a602-a871f56d3e66"): "Поступления",
     UUID("721bf726-cdda-4ca8-bf22-f345ca0f677b"): "Реальные фотографии",
     UUID("edce2987-daae-4339-8330-8cb96ad912bf"): "Дефектные фотографии",
+    LIBRARY_GROUP_ID: "Свободные коллажи",
 }
 
 
 def get(group_id: UUID) -> GroupConfig | None:
     return GROUP_SETTINGS.get(group_id)
+
+
+def creation_flags(group_id: UUID) -> tuple[bool, bool]:
+    """(owner_optional, title_required) for a group's manual-creation mode.
+    (False, False) when the group has no creation mode (absent / role=none)."""
+    cfg = GROUP_SETTINGS.get(group_id)
+    if cfg is None or cfg.studio_role == "none":
+        return False, False
+    return cfg.owner_optional, cfg.title_required
 
 
 def allows_video(group_id: UUID) -> bool:

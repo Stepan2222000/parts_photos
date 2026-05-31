@@ -71,8 +71,13 @@ export const api = {
     },
   },
   collages: {
-    create: (body: { group_id: string; owner_kind: "smart_part" | "instance"; owner_id: string }) =>
-      req<Collage>("/collages", { method: "POST", body: JSON.stringify(body) }),
+    create: (body: {
+      group_id: string;
+      // owner is optional for the library group; required everywhere else.
+      owner_kind?: "smart_part" | "instance";
+      owner_id?: string;
+      title?: string;
+    }) => req<Collage>("/collages", { method: "POST", body: JSON.stringify(body) }),
     get: (id: string) => req<CollageDetail>(`/collages/${id}`),
     delete: (id: string) => req<void>(`/collages/${id}`, { method: "DELETE" }),
     reorder: (id: string, updates: { photo_id: string; position: number }[]) =>

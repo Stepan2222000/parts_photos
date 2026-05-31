@@ -14,16 +14,22 @@ export default function OwnerCard({ collage, thumbUrl }: Props) {
       </div>
       <div className={s.body}>
         <div className={s.row}>
-          <span className={s.id}>
-            {collage.owner_kind === "instance" ? `#${collage.owner_id}` : collage.owner_id}
-          </span>
-          <span
-            className={`${s.kind} ${
-              collage.owner_kind === "smart_part" ? s.kindSmart : s.kindInstance
-            }`}
-          >
-            {collage.owner_kind === "smart_part" ? "Smart part" : "Экземпляр"}
-          </span>
+          {collage.owner_id ? (
+            <>
+              <span className={s.id}>
+                {collage.owner_kind === "instance" ? `#${collage.owner_id}` : collage.owner_id}
+              </span>
+              <span
+                className={`${s.kind} ${
+                  collage.owner_kind === "smart_part" ? s.kindSmart : s.kindInstance
+                }`}
+              >
+                {collage.owner_kind === "smart_part" ? "Smart part" : "Экземпляр"}
+              </span>
+            </>
+          ) : (
+            <span className={`${s.kind} ${s.kindSmart}`}>Без привязки</span>
+          )}
           {collage.owner_kind === "instance" && collage.owner_condition === "defect" && (
             <span className={s.defect}>дефект</span>
           )}
@@ -32,8 +38,17 @@ export default function OwnerCard({ collage, thumbUrl }: Props) {
           )}
         </div>
         <div className={s.name}>
-          {collage.owner_name ? `${collage.owner_name}.` : "Без названия."}
+          {collage.title?.trim()
+            ? `${collage.title.trim()}.`
+            : collage.owner_name
+              ? `${collage.owner_name}.`
+              : "Без названия."}
         </div>
+        {collage.title?.trim() && collage.owner_name && (
+          <div style={{ color: "var(--text-muted)", fontSize: 13, marginTop: 2 }}>
+            {collage.owner_name}
+          </div>
+        )}
         {collage.owner_articles.length > 0 && (
           <div className={s.articles}>
             {collage.owner_articles.map((a) => (

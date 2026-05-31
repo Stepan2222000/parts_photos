@@ -6,6 +6,17 @@ import type { Collage, CollageDetail, Photo } from "@/lib/types";
 import type { CollagePickedPhoto } from "./SourcesPanel";
 import s from "./CollagePickerDialog.module.css";
 
+/** Display label for a collage: title (library) → smart/part name → instance →
+ * owner id → fallback. */
+function collageLabel(c: Pick<Collage, "title" | "owner_name" | "owner_kind" | "owner_id">): string {
+  return (
+    c.title?.trim() ||
+    c.owner_name ||
+    (c.owner_kind === "instance" ? `#${c.owner_id}` : c.owner_id) ||
+    "Без названия"
+  );
+}
+
 interface Props {
   onClose: () => void;
   onPick: (photos: CollagePickedPhoto[]) => void;
@@ -72,7 +83,7 @@ export default function CollagePickerDialog({ onClose, onPick, title }: Props) {
           id: p.id,
           url: p.url,
           collageId: active.id,
-          collageOwnerId: active.owner_id,
+          collageOwnerId: collageLabel(active),
         });
       }
     }
@@ -113,7 +124,7 @@ export default function CollagePickerDialog({ onClose, onPick, title }: Props) {
                     )}
                   </div>
                   <div className={s.itemMain}>
-                    <span className={s.itemName}>{c.owner_id}</span>
+                    <span className={s.itemName}>{collageLabel(c)}</span>
                     {c.group_name && (
                       <span className={s.itemGroup}>{c.group_name}</span>
                     )}
@@ -132,7 +143,7 @@ export default function CollagePickerDialog({ onClose, onPick, title }: Props) {
             {active && (
               <>
                 <div className={s.rightHead}>
-                  <h3 className={s.rightTitle}>{active.owner_id}</h3>
+                  <h3 className={s.rightTitle}>{collageLabel(active)}</h3>
                   <span className={s.rightSub}>
                     {active.photos.length} фото · выбрано {picked.size}
                   </span>

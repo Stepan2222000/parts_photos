@@ -13,21 +13,60 @@ interface Props {
   groupId: string;
   ownerKind: OwnerKind;
   conditionFilter: ConditionFilter | null;
+  ownerOptional?: boolean;
+  titleRequired?: boolean;
   onClose: () => void;
 }
 
-export default function CreateCollageDialog({ groupId, ownerKind, conditionFilter, onClose }: Props) {
+export default function CreateCollageDialog({
+  groupId,
+  ownerKind,
+  conditionFilter,
+  ownerOptional = false,
+  titleRequired = false,
+  onClose,
+}: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // ── smart_part branch state ──
+  // ── smart_part / library branch state ──
   const [owner, setOwner] = useState<OwnerSearchResult | null>(null);
+  const [title, setTitle] = useState("");
 
   function goToCollage(id: string, fresh: boolean) {
     onClose();
     router.push(fresh ? `/collages/${id}?upload=1` : `/collages/${id}`);
     router.refresh();
+  }
+
+  // ── library branch: required title + OPTIONAL smart binding ──
+  async function createLibrary(e: React.FormEvent) {
+    e.preventDefault();
+    const t = title.trim();
+    if (!t) {
+      setErr("Введи название коллажа");
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    try {
+      const c = await api.collages.create({
+        group_id: groupId,
+        title: t,
+        ...(owner ? { owner_kind: "smart_part", owner_id: owner.smart_id } : {}),
+      });
+      goToCollage(c.id, true);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 422 && owner) {
+        setErr(`Запчасть ${owner.smart_id} не найдена в каталоге smart.`);
+      } else if (e instanceof ApiError) {
+        setErr(`Не удалось создать: ${e.body}`);
+      } else {
+        setErr(String(e));
+      }
+      setBusy(false);
+    }
   }
 
   async function createSmart(e: React.FormEvent) {
@@ -85,11 +124,43 @@ export default function CreateCollageDialog({ groupId, ownerKind, conditionFilte
     }
   }
 
+  const maxWidth = ownerOptional ? 480 : ownerKind === "instance" ? 540 : 460;
+
   if (typeof document === "undefined") return null;
   return createPortal(
     <div className={s.backdrop} onClick={onClose}>
-      <div className={s.dialog} onClick={(e) => e.stopPropagation()} style={{ maxWidth: ownerKind === "instance" ? 540 : 460 }}>
-        {ownerKind === "smart_part" ? (
+      <div className={s.dialog} onClick={(e) => e.stopPropagation()} style={{ maxWidth }}>
+        {ownerOptional ? (
+          <form onSubmit={createLibrary} style={{ display: "contents" }}>
+            <h2 className={s.title}>Новый коллаж.</h2>
+            <div className={s.field}>
+              <label className={s.label}>Название</label>
+              <input
+                className={s.input}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Например: Подборка для Avito"
+                maxLength={200}
+                autoFocus
+              />
+            </div>
+            <div className={s.field}>
+              <label className={s.label}>
+                Запчасть <span style={{ color: "var(--text-faint)", fontWeight: 400 }}>· необязательно</span>
+              </label>
+              <OwnerSearch selected={owner} onChange={setOwner} />
+            </div>
+            {err && <div className={s.error}>{err}</div>}
+            <div className={s.actions}>
+              <button type="button" className={s.btn} onClick={onClose} disabled={busy}>
+                Cancel
+              </button>
+              <button type="submit" className={`${s.btn} ${s.btnPrimary}`} disabled={busy || !title.trim()}>
+                {busy ? "Создаю…" : "Create"}
+              </button>
+            </div>
+          </form>
+        ) : ownerKind === "smart_part" ? (
           <form onSubmit={createSmart} style={{ display: "contents" }}>
             <h2 className={s.title}>Новый коллаж.</h2>
             <div className={s.field}>

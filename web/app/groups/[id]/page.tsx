@@ -37,6 +37,8 @@ export default async function GroupPage({ params, searchParams }: Props) {
           groupId={id}
           ownerKind={active.owner_kind}
           conditionFilter={active.condition_filter}
+          ownerOptional={active.owner_optional}
+          titleRequired={active.title_required}
         />
       }
     >

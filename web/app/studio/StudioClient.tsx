@@ -122,16 +122,22 @@ export default function StudioClient({
         const want = new Set(initialSourcePhotoIds);
         const picked: CollagePickedPhoto[] = [];
         const found = new Set<string>();
+        // Label for this source collage: title (library) → instance id → smart id.
+        const ownerLabel =
+          c.title?.trim() ||
+          (c.owner_kind === "instance" ? `#${c.owner_id}` : c.owner_id) ||
+          "Без названия";
         for (const p of c.photos) {
           if (want.has(p.id) && p.state === "uploaded") {
-            picked.push({ id: p.id, url: p.url, collageId: c.id, collageOwnerId: c.owner_id });
+            picked.push({ id: p.id, url: p.url, collageId: c.id, collageOwnerId: ownerLabel });
             found.add(p.id);
           }
         }
         setCollagePhotos(picked);
 
-        const ownerLabel = c.owner_kind === "instance" ? `#${c.owner_id}` : c.owner_id;
-        setDefaultBatchName(c.owner_name ? `${ownerLabel} · ${c.owner_name}` : ownerLabel);
+        setDefaultBatchName(
+          c.owner_name && c.owner_id ? `${ownerLabel} · ${c.owner_name}` : ownerLabel,
+        );
 
         const missing = initialSourcePhotoIds.filter((id) => !found.has(id));
         if (missing.length) {

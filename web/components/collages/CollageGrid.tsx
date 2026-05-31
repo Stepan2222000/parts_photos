@@ -12,6 +12,17 @@ interface Props {
   showGroup?: boolean;
 }
 
+/** Primary label: free-text title (library) → smart/part name → instance →
+ * owner id → fallback. */
+function collageLabel(c: Collage): string {
+  return (
+    c.title?.trim() ||
+    c.owner_name ||
+    (c.owner_kind === "instance" ? "Экземпляр" : c.owner_id) ||
+    "Без названия"
+  );
+}
+
 function PhotoIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -60,8 +71,8 @@ export default function CollageGrid({ collages, showGroup }: Props) {
     if (deleting) return;
     const what =
       c.photos_count > 0
-        ? `Удалить коллаж «${c.owner_name || c.owner_id}» вместе с ${c.photos_count} фото? Это нельзя отменить.`
-        : `Удалить коллаж «${c.owner_name || c.owner_id}»?`;
+        ? `Удалить коллаж «${collageLabel(c)}» вместе с ${c.photos_count} фото? Это нельзя отменить.`
+        : `Удалить коллаж «${collageLabel(c)}»?`;
     if (!confirm(what)) return;
     setDeleting(c.id);
     try {
@@ -109,11 +120,14 @@ export default function CollageGrid({ collages, showGroup }: Props) {
                 {c.owner_condition === "personal" && <span className={s.defectChip}>personal</span>}
               </div>
             )}
-            <div className={s.name}>
-              {c.owner_name || (c.owner_kind === "instance" ? "Экземпляр" : c.owner_id)}
-            </div>
+            <div className={s.name}>{collageLabel(c)}</div>
             <div className={s.art}>
-              {c.owner_articles?.length ? c.owner_articles.join(" · ") : c.owner_id}
+              {c.owner_articles?.length
+                ? c.owner_articles.join(" · ")
+                : // library collage shows its smart label (or "без привязки")
+                  c.title
+                  ? c.owner_name || c.owner_id || "без привязки"
+                  : c.owner_id}
             </div>
             <div className={s.foot}>
               {c.photos_count > 0 ? (

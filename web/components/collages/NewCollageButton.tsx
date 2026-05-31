@@ -8,6 +8,8 @@ interface Props {
   groupId: string;
   ownerKind: OwnerKind | null;
   conditionFilter: ConditionFilter | null;
+  ownerOptional?: boolean;
+  titleRequired?: boolean;
 }
 
 const BTN: React.CSSProperties = {
@@ -22,7 +24,13 @@ const BTN: React.CSSProperties = {
   fontFamily: "inherit",
 };
 
-export default function NewCollageButton({ groupId, ownerKind, conditionFilter }: Props) {
+export default function NewCollageButton({
+  groupId,
+  ownerKind,
+  conditionFilter,
+  ownerOptional = false,
+  titleRequired = false,
+}: Props) {
   const [open, setOpen] = useState(false);
 
   // No creation mode for this group (e.g. "Поступления" — track-number owner).
@@ -68,6 +76,8 @@ export default function NewCollageButton({ groupId, ownerKind, conditionFilter }
           groupId={groupId}
           ownerKind={ownerKind}
           conditionFilter={conditionFilter}
+          ownerOptional={ownerOptional}
+          titleRequired={titleRequired}
           onClose={() => setOpen(false)}
         />
       )}

@@ -33,9 +33,11 @@ export default async function CollagePage({ params }: Props) {
         { label: collage.group_name },
         {
           label:
-            collage.owner_kind === "instance"
+            collage.title?.trim() ||
+            (collage.owner_kind === "instance"
               ? `#${collage.owner_id}`
-              : collage.owner_id,
+              : collage.owner_id) ||
+            "Без названия",
           here: true,
         },
       ]}
@@ -63,7 +65,7 @@ export default async function CollagePage({ params }: Props) {
       <PhotosGrid
         collageId={collage.id}
         groupId={collage.group_id}
-        ownerId={collage.owner_id}
+        ownerId={collage.owner_id ?? collage.title?.trim() ?? collage.id}
         photos={collage.photos}
       />
       <Uploader collageId={collage.id} allowsVideo={allowsVideo} />

@@ -28,6 +28,11 @@ class Group(BaseModel):
     condition_filter: ConditionFilter | None = None
     # Whether this group accepts video uploads (only the source photo groups do).
     allows_video: bool = False
+    # Free-form library ("Свободные коллажи"): the smart binding is optional
+    # (just a label) and the collage carries a required free-text title.
+    # The frontend shows an optional smart-picker + a required title field.
+    owner_optional: bool = False
+    title_required: bool = False
 
 
 class GroupPositionUpdate(BaseModel):
@@ -48,8 +53,12 @@ class GroupPatch(BaseModel):
 
 class CollageCreate(BaseModel):
     group_id: UUID
-    owner_kind: OwnerKind
-    owner_id: str = Field(min_length=1, max_length=200)
+    # Owner is optional only for the free-form library group; every other group
+    # requires it (enforced in create_collage against GROUP_SETTINGS).
+    owner_kind: OwnerKind | None = None
+    owner_id: str | None = Field(default=None, min_length=1, max_length=200)
+    # Required for the library group (title_required), ignored elsewhere.
+    title: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 class MoveTarget(BaseModel):
@@ -66,8 +75,10 @@ class CollageTransferRequest(BaseModel):
 class Collage(BaseModel):
     id: UUID
     group_id: UUID
-    owner_kind: OwnerKind
-    owner_id: str
+    # null for unbound library collages (no smart link).
+    owner_kind: OwnerKind | None = None
+    owner_id: str | None = None
+    title: str | None = None
     created_at: datetime
     photos_count: int = 0
     first_photo_url: str | None = None
@@ -83,8 +94,9 @@ class CollageDetail(BaseModel):
     id: UUID
     group_id: UUID
     group_name: str
-    owner_kind: OwnerKind
-    owner_id: str
+    owner_kind: OwnerKind | None = None
+    owner_id: str | None = None
+    title: str | None = None
     owner_name: str | None = None
     owner_articles: list[str] = []
     owner_condition: str | None = None
