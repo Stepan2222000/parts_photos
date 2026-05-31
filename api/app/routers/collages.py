@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from typing import Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
+import asyncpg
 from fastapi import APIRouter, HTTPException, Query
 
 from ..db import pool
@@ -358,16 +359,179 @@ async def list_collage_move_targets(collage_id: UUID) -> list[MoveTarget]:
     return [MoveTarget(id=r["id"], name=r["name"]) for r in rows]
 
 
+async def _place_photos(
+    conn: asyncpg.Connection,
+    *,
+    photo_ids: list[UUID],
+    target_group_id: UUID,
+    target_owner_kind: str,
+    target_owner_id: str,
+    require_source_collage_id: UUID | None = None,
+) -> tuple[list[Photo], list[str]]:
+    """Shared core for placing raw/library photos into a target channel.
+
+    Per-photo the operation is DERIVED, never chosen by the caller — it is a
+    *move* iff `(source_group, target_group)` is a `DIRECT_MOVE_TARGETS` route
+    (i.e. Реальные → На публикацию), otherwise a *copy*:
+
+    - move: the same `photos` row is repointed, its object relocated, the source
+      ends up empty (caller deletes the returned old keys after commit);
+    - copy: the object is duplicated and a NEW row inserted (source='copy',
+      previous_s3_key = origin), the source row untouched.
+
+    Must run inside a transaction. Returns (placed_photos, old_keys_to_delete).
+    Validation here is route/photo-level (matrix gate, defect-source guard for
+    reference channels, no video into publication); owner resolution and the
+    item condition gate are the caller's job. No silent fallbacks.
+    """
+    tgt_cfg = gconfig.get(target_group_id)
+    if tgt_cfg is None or tgt_cfg.studio_role != "target":
+        raise HTTPException(422, "target group is not a publication target")
+
+    photo_ids = list(dict.fromkeys(photo_ids))
+
+    # Lock the target (group, owner) slot — serializes find-or-create of the
+    # collage and the MAX(position)+1 assignment, same pattern uploads/Studio use.
+    await conn.execute(
+        "SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+        f"{target_group_id}:{target_owner_id}",
+    )
+
+    rows = await conn.fetch(
+        """
+        SELECT p.id, p.s3_key, p.mime, p.size_bytes, p.collage_id,
+               c.group_id AS src_group_id,
+               c.owner_kind AS src_owner_kind, c.owner_id AS src_owner_id
+        FROM photos p
+        JOIN photo_collages c ON c.id = p.collage_id
+        WHERE p.id = ANY($1::uuid[]) AND p.state = 'uploaded'
+        """,
+        photo_ids,
+    )
+    by_id = {r["id"]: r for r in rows}
+    missing = [str(p) for p in photo_ids if p not in by_id]
+    if missing:
+        raise HTTPException(
+            409,
+            "Photos not found / not uploaded (already moved?): " + ", ".join(missing),
+        )
+    if require_source_collage_id is not None:
+        wrong = [str(r["id"]) for r in rows if r["collage_id"] != require_source_collage_id]
+        if wrong:
+            raise HTTPException(409, "Photos not in this collage: " + ", ".join(wrong))
+
+    videos = [str(r["id"]) for r in rows if (r["mime"] or "").startswith("video/")]
+    if videos:
+        raise HTTPException(400, "Видео нельзя переносить в канал публикации: " + ", ".join(videos))
+
+    # Route gate per source group + per-item defect guard for reference channels
+    # (the matrix is group-level, but «Реальные» mixes conditions, so a target
+    # that refuses defect sources must reject a defect item individually).
+    for r in rows:
+        if not gconfig.is_transfer_allowed(r["src_group_id"], target_group_id):
+            raise HTTPException(400, "Перенос запрещён правилами источник→цель")
+        if (
+            not tgt_cfg.accepts_defect_sources
+            and r["src_owner_kind"] == "instance"
+            and r["src_owner_id"]
+        ):
+            try:
+                sid = int(r["src_owner_id"])
+            except (TypeError, ValueError):
+                sid = None
+            if sid is not None:
+                src_cond = await conn.fetchval(
+                    "SELECT condition FROM uchet_ext.items WHERE id = $1", sid
+                )
+                if src_cond == "defect":
+                    raise HTTPException(
+                        400,
+                        "Дефектный источник нельзя переносить в эталонные "
+                        "(референс не делаем из дефектного фото)",
+                    )
+
+    target = await conn.fetchrow(
+        """
+        SELECT id FROM photo_collages
+        WHERE group_id = $1 AND owner_kind = $2 AND owner_id = $3
+        """,
+        target_group_id, target_owner_kind, target_owner_id,
+    )
+    if target is None:
+        target = await conn.fetchrow(
+            """
+            INSERT INTO photo_collages (group_id, owner_kind, owner_id)
+            VALUES ($1, $2, $3)
+            RETURNING id
+            """,
+            target_group_id, target_owner_kind, target_owner_id,
+        )
+    target_collage_id = target["id"]
+
+    next_pos = await conn.fetchval(
+        "SELECT COALESCE(MAX(position) + 1, 1) FROM photos "
+        "WHERE collage_id = $1 AND state <> 'deleted'",
+        target_collage_id,
+    )
+
+    placed: list[Photo] = []
+    old_keys: list[str] = []
+    for pid in photo_ids:
+        r = by_id[pid]
+        move = gconfig.is_direct_move_allowed(r["src_group_id"], target_group_id)
+        old_key = r["s3_key"]
+        tail = old_key.rsplit("/", 1)[-1]
+        ext = tail.rsplit(".", 1)[-1] if "." in tail else "jpg"
+        new_pid = pid if move else uuid4()
+        new_key = f"groups/{target_group_id}/collages/{target_collage_id}/{new_pid}.{ext}"
+        # Copy first; on move the old object stays until after commit so a
+        # rollback never strands a row pointing at a deleted object.
+        try:
+            copy_within_photos(old_key, new_key)
+        except Exception as exc:
+            raise HTTPException(500, f"Failed to copy object: {exc}") from exc
+
+        if move:
+            row = await conn.fetchrow(
+                """
+                UPDATE photos
+                   SET collage_id = $1, s3_key = $2, position = $3
+                 WHERE id = $4
+                RETURNING id, collage_id, position, s3_key, mime, size_bytes,
+                          state, uploaded_at, created_at
+                """,
+                target_collage_id, new_key, next_pos, pid,
+            )
+            old_keys.append(old_key)
+        else:
+            row = await conn.fetchrow(
+                """
+                INSERT INTO photos
+                  (id, collage_id, position, s3_key, mime, size_bytes, state,
+                   uploaded_at, source, previous_s3_key)
+                VALUES ($1, $2, $3, $4, $5, $6, 'uploaded', now(), 'copy', $7)
+                RETURNING id, collage_id, position, s3_key, mime, size_bytes,
+                          state, uploaded_at, created_at
+                """,
+                new_pid, target_collage_id, next_pos, new_key, r["mime"],
+                r["size_bytes"], old_key,
+            )
+        next_pos += 1
+        placed.append(Photo(**dict(row), url=public_url(row["s3_key"])))
+
+    return placed, old_keys
+
+
 @router.post("/collages/{collage_id}/transfer", response_model=list[Photo])
 async def transfer_collage_photos(
     collage_id: UUID, payload: CollageTransferRequest
 ) -> list[Photo]:
     """Physically move raw photos from this collage into a publication channel.
 
-    Move semantics (not copy): the same `photos` rows are repointed to the
-    target collage, their objects relocated in MinIO, and nothing is left in the
-    source. No Studio generation — this publishes the real photo as-is. Allowed
-    routes are the strict pairs in `gconfig.DIRECT_MOVE_TARGETS`.
+    Collage-page shortcut for the strict direct-move route (Реальные → На
+    публикацию, same item). Delegates the placement to `_place_photos`, which
+    derives the move from `DIRECT_MOVE_TARGETS` — so the same item ends up empty
+    in «Реальные». No Studio generation; publishes the real photo as-is.
     """
     src = await pool().fetchrow(
         "SELECT id, group_id, owner_kind, owner_id FROM photo_collages WHERE id = $1",
@@ -376,9 +540,8 @@ async def transfer_collage_photos(
     if src is None:
         raise HTTPException(404, "Collage not found")
 
-    source_group_id: UUID = src["group_id"]
     target_group_id = payload.target_group_id
-    if not gconfig.is_direct_move_allowed(source_group_id, target_group_id):
+    if not gconfig.is_direct_move_allowed(src["group_id"], target_group_id):
         raise HTTPException(
             400, "Move not allowed: this source→target pair is not a direct-move route"
         )
@@ -408,96 +571,16 @@ async def transfer_collage_photos(
             )
         gconfig.assert_item_condition_allowed(item["condition"], target_group_id)
 
-    # De-dup while preserving the requested order.
-    photo_ids = list(dict.fromkeys(payload.photo_ids))
-
-    moved: list[Photo] = []
-    old_keys: list[str] = []
-
     async with pool().acquire() as conn:
         async with conn.transaction():
-            # Lock the target (group, owner) slot — serializes find-or-create of
-            # the target collage and the MAX(position)+1 assignment, the same
-            # pattern uploads and Studio transfer use.
-            await conn.execute(
-                "SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))",
-                f"{target_group_id}:{owner_id}",
+            moved, old_keys = await _place_photos(
+                conn,
+                photo_ids=payload.photo_ids,
+                target_group_id=target_group_id,
+                target_owner_kind=tgt_cfg.owner_kind,
+                target_owner_id=owner_id,
+                require_source_collage_id=collage_id,
             )
-
-            # Re-read under the lock: the photos must still live in THIS collage
-            # and be uploaded. Guards double-submit and concurrent moves.
-            rows = await conn.fetch(
-                """
-                SELECT id, s3_key, mime FROM photos
-                WHERE id = ANY($1::uuid[]) AND collage_id = $2 AND state = 'uploaded'
-                """,
-                photo_ids, collage_id,
-            )
-            by_id = {r["id"]: r for r in rows}
-            missing = [str(p) for p in photo_ids if p not in by_id]
-            if missing:
-                raise HTTPException(
-                    409,
-                    "Photos not in this collage / not uploaded (already moved?): "
-                    + ", ".join(missing),
-                )
-            videos = [str(r["id"]) for r in rows if (r["mime"] or "").startswith("video/")]
-            if videos:
-                raise HTTPException(
-                    400, "Видео нельзя переносить на публикацию: " + ", ".join(videos)
-                )
-
-            target = await conn.fetchrow(
-                """
-                SELECT id, group_id FROM photo_collages
-                WHERE group_id = $1 AND owner_kind = $2 AND owner_id = $3
-                """,
-                target_group_id, tgt_cfg.owner_kind, owner_id,
-            )
-            if target is None:
-                target = await conn.fetchrow(
-                    """
-                    INSERT INTO photo_collages (group_id, owner_kind, owner_id)
-                    VALUES ($1, $2, $3)
-                    RETURNING id, group_id
-                    """,
-                    target_group_id, tgt_cfg.owner_kind, owner_id,
-                )
-            target_collage_id = target["id"]
-
-            next_pos = await conn.fetchval(
-                "SELECT COALESCE(MAX(position) + 1, 1) FROM photos "
-                "WHERE collage_id = $1 AND state <> 'deleted'",
-                target_collage_id,
-            )
-
-            for pid in photo_ids:
-                old_key = by_id[pid]["s3_key"]
-                tail = old_key.rsplit("/", 1)[-1]
-                ext = tail.rsplit(".", 1)[-1] if "." in tail else "jpg"
-                new_key = (
-                    f"groups/{target['group_id']}/collages/{target_collage_id}/{pid}.{ext}"
-                )
-                # Copy first; the old object stays until after commit so a
-                # rollback never strands a row pointing at a deleted object.
-                try:
-                    copy_within_photos(old_key, new_key)
-                except Exception as exc:
-                    raise HTTPException(500, f"Failed to copy object: {exc}") from exc
-
-                row = await conn.fetchrow(
-                    """
-                    UPDATE photos
-                       SET collage_id = $1, s3_key = $2, position = $3
-                     WHERE id = $4
-                    RETURNING id, collage_id, position, s3_key, mime, size_bytes,
-                              state, uploaded_at, created_at
-                    """,
-                    target_collage_id, new_key, next_pos, pid,
-                )
-                next_pos += 1
-                old_keys.append(old_key)
-                moved.append(Photo(**dict(row), url=public_url(row["s3_key"])))
 
     # Rows now point at the new keys — drop the originals (best-effort).
     for k in old_keys:

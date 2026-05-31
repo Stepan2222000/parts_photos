@@ -99,6 +99,19 @@ export default function Sidebar({
           <span className={s.name}>Search photos</span>
         </Link>
         <Link
+          href="/gaps"
+          className={s.item}
+          onClick={onCloseMobile}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="3" width="7" height="7" rx="1" strokeDasharray="2 2" />
+            <rect x="3" y="14" width="7" height="7" rx="1" strokeDasharray="2 2" />
+            <path d="M14 17.5h7M17.5 14v7" />
+          </svg>
+          <span className={s.name}>Пробелы фото</span>
+        </Link>
+        <Link
           href="/studio"
           className={s.item}
           onClick={onCloseMobile}

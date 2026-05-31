@@ -224,3 +224,47 @@ export interface LookupItem {
   condition_note: string | null;
   existing_collage_id: string | null;
 }
+
+// ─── Photo gaps ───────────────────────────────────────────────────────────
+
+export type GapKind = "reference" | "personal" | "defect";
+
+export interface GapCounts {
+  reference: number;
+  personal: number;
+  defect: number;
+}
+
+export interface GapRow {
+  kind: GapKind;
+  smart_part_id: string | null;
+  item_id: number | null;
+  name: string | null;
+  articles: string[];
+  condition: string | null;
+  condition_note: string | null;
+  in_stock_count: number;
+  real_photos: number;
+  free_collages: number;
+  target_group_id: string;
+  target_owner_kind: OwnerKind;
+  target_owner_id: string;
+  target_collage_id: string | null;
+}
+
+export interface GapSourceCollage {
+  collage_id: string;
+  group_id: string;
+  group_name: string | null;
+  owner_kind: OwnerKind | null;
+  owner_id: string | null;
+  title: string | null;
+  item_id: number | null;
+  condition: string | null;
+  photos: Photo[];
+}
+
+export interface GapSources {
+  real: GapSourceCollage[];
+  free: GapSourceCollage[];
+}

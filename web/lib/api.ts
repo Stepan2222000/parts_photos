@@ -1,11 +1,16 @@
 import type {
   Collage,
   CollageDetail,
+  GapCounts,
+  GapKind,
+  GapRow,
+  GapSources,
   Group,
   ItemSearchResponse,
   LookupItem,
   LookupSmart,
   MoveTarget,
+  OwnerKind,
   OwnerSearchResult,
   Photo,
   StudioAsset,
@@ -139,6 +144,28 @@ export const api = {
   owners: {
     search: (q: string, limit = 20) =>
       req<OwnerSearchResult[]>(`/owners/search?q=${encodeURIComponent(q)}&limit=${limit}`),
+  },
+  gaps: {
+    counts: () => req<GapCounts>("/gaps/counts"),
+    list: (kind: GapKind, params: { q?: string; limit?: number; offset?: number } = {}) => {
+      const u = new URLSearchParams({ kind });
+      if (params.q) u.set("q", params.q);
+      if (params.limit) u.set("limit", String(params.limit));
+      if (params.offset) u.set("offset", String(params.offset));
+      return req<GapRow[]>(`/gaps?${u.toString()}`);
+    },
+    sources: (kind: GapKind, owner: { smartPartId?: string; itemId?: number }) => {
+      const u = new URLSearchParams({ kind });
+      if (owner.smartPartId) u.set("smart_part_id", owner.smartPartId);
+      if (owner.itemId != null) u.set("item_id", String(owner.itemId));
+      return req<GapSources>(`/gaps/sources?${u.toString()}`);
+    },
+    fill: (body: {
+      target_group_id: string;
+      target_owner_kind: OwnerKind;
+      target_owner_id: string;
+      photo_ids: string[];
+    }) => req<Photo[]>("/gaps/fill", { method: "POST", body: JSON.stringify(body) }),
   },
   studio: {
     listBackgrounds: () => req<StudioAsset[]>("/studio/backgrounds"),

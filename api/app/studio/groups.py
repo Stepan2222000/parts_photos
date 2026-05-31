@@ -46,6 +46,10 @@ class GroupConfig:
     owner_free: bool = False
 
 
+# Фиксированные id ключевых каналов (имена в БД могут меняться — id нет).
+REFERENCE_GROUP_ID = UUID("ae697d8d-e803-42c4-9982-ecefbf8a8cdf")  # Эталонные
+PUBLICATION_GROUP_ID = UUID("3cf67240-7597-451a-8ec1-fb097afdeb88")  # На публикацию
+REAL_GROUP_ID = UUID("721bf726-cdda-4ca8-bf22-f345ca0f677b")  # Реальные фотографии
 # Фиксированный id свободной библиотеки (см. migration_006_library_collages.sql).
 LIBRARY_GROUP_ID = UUID("0a7fbbdf-e605-48f1-a320-ca2094a0f32c")
 
