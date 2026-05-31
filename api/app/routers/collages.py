@@ -315,9 +315,9 @@ async def get_collage(collage_id: UUID) -> CollageDetail:
 @router.get("/collages/{collage_id}/move-targets", response_model=list[MoveTarget])
 async def list_collage_move_targets(collage_id: UUID) -> list[MoveTarget]:
     """Publication channels this collage's raw photos may be physically moved
-    into — narrowed to the ones the bound item's condition actually fits. With
-    «Реальные фотографии» now mixing conditions, a personal collage routes to
-    «Реальные на публикацию» and a defect one to «Дефектные на публикацию»."""
+    into — narrowed to the ones the bound item's condition actually fits.
+    personal/defect collages route to «На публикацию»; a new collage gets none
+    (new is published only as a smart reference via «Эталонные»)."""
     head = await pool().fetchrow(
         "SELECT group_id, owner_kind, owner_id FROM photo_collages WHERE id = $1",
         collage_id,

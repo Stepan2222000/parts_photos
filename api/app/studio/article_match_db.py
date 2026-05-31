@@ -412,6 +412,8 @@ async def search_items(
                 block = "нужен defect"
             elif cfg.condition_filter == "not_defect":
                 block = "дефектные сюда нельзя"
+            elif cfg.condition_filter == "not_new":
+                block = "new сюда нельзя"
             else:
                 block = "состояние не подходит"
         results.append({

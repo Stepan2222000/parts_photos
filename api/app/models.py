@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 
 OwnerKind = Literal["smart_part", "instance"]
-ConditionFilter = Literal["personal", "defect", "not_defect", "any"]
+ConditionFilter = Literal["personal", "defect", "not_defect", "not_new", "any"]
 
 
 class Group(BaseModel):

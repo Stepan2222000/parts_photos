@@ -19,7 +19,7 @@ from fastapi import HTTPException
 
 StudioRole = Literal["source", "target", "none"]
 OwnerKind = Literal["smart_part", "instance"]
-ConditionFilter = Literal["personal", "defect", "not_defect", "any"]
+ConditionFilter = Literal["personal", "defect", "not_defect", "not_new", "any"]
 
 
 @dataclass(frozen=True)
@@ -55,12 +55,11 @@ GROUP_SETTINGS: dict[UUID, GroupConfig] = {
     # target (smart_part-level). No item condition check (smart_part owner).
     UUID("ae697d8d-e803-42c4-9982-ecefbf8a8cdf"):
         GroupConfig("target", "smart_part", "any", accepts_defect_sources=False),
-    # Реальные на публикацию — instance, only personal-condition items, curated.
+    # На публикацию — единый instance-канал публикации: принимает personal и
+    # defect (not_new), но НЕ new (new публикуется только как эталон). Бывшая
+    # «Дефектные на публикацию» влита сюда. Бейджи различают состояние.
     UUID("3cf67240-7597-451a-8ec1-fb097afdeb88"):
-        GroupConfig("target", "instance", "personal"),
-    # Дефектные на публикацию — instance, only defect-condition items.
-    UUID("a1790194-efa0-4dda-bed4-d8bc15b3b624"):
-        GroupConfig("target", "instance", "defect"),
+        GroupConfig("target", "instance", "not_new"),
     # Avito 2-й аккаунт — smart_part-level target, no item condition check.
     UUID("fa0df9bb-f285-4eb2-ab46-cd24e520a4e1"):
         GroupConfig("target", "smart_part", "any"),
@@ -88,8 +87,7 @@ GROUP_SETTINGS: dict[UUID, GroupConfig] = {
 # Convenient aliases used in matching/UI.
 GROUP_NAMES: dict[UUID, str] = {
     UUID("ae697d8d-e803-42c4-9982-ecefbf8a8cdf"): "Эталонные на публикацию",
-    UUID("3cf67240-7597-451a-8ec1-fb097afdeb88"): "Реальные на публикацию",
-    UUID("a1790194-efa0-4dda-bed4-d8bc15b3b624"): "Дефектные на публикацию",
+    UUID("3cf67240-7597-451a-8ec1-fb097afdeb88"): "На публикацию",
     UUID("fa0df9bb-f285-4eb2-ab46-cd24e520a4e1"): "Avito 2-й аккаунт",
     UUID("b66cc603-0bf2-4010-a602-a871f56d3e66"): "Поступления",
     UUID("721bf726-cdda-4ca8-bf22-f345ca0f677b"): "Реальные фотографии",
@@ -126,12 +124,15 @@ ALL_CONDITIONS = ("new", "personal", "defect")
 
 def condition_allowed(item_condition: str, condition_filter: ConditionFilter) -> bool:
     """Годится ли состояние экземпляра под фильтр группы. ЕДИНОЕ место правила.
-    any → любое; not_defect → всё кроме defect; personal/defect → точное совпадение.
+    any → любое; not_defect → всё кроме defect; not_new → всё кроме new;
+    personal/defect → точное совпадение.
     """
     if condition_filter == "any":
         return True
     if condition_filter == "not_defect":
         return item_condition != "defect"
+    if condition_filter == "not_new":
+        return item_condition != "new"
     return item_condition == condition_filter
 
 
@@ -192,12 +193,11 @@ def assert_item_condition_allowed(item_condition: str, group_id: UUID) -> None:
 # matrix, which also permits e.g. Реальные→Эталонные / Avito2). Here each source
 # maps to exactly its own publication channel.
 DIRECT_MOVE_TARGETS: dict[UUID, tuple[UUID, ...]] = {
-    # Реальные фотографии → Реальные ИЛИ Дефектные на публикацию. Конкретный
-    # канал выбирается по состоянию коллажа (personal → Реальные, defect →
-    # Дефектные); см. collage-scoped move-targets и assert_item_condition_allowed.
+    # Реальные фотографии → единый канал «На публикацию». Принимает personal и
+    # defect; для new коллажей collage-scoped move-targets вернёт пусто (new
+    # туда нельзя — публикуется только как эталон через Studio).
     UUID("721bf726-cdda-4ca8-bf22-f345ca0f677b"): (
-        UUID("3cf67240-7597-451a-8ec1-fb097afdeb88"),  # Реальные на публикацию
-        UUID("a1790194-efa0-4dda-bed4-d8bc15b3b624"),  # Дефектные на публикацию
+        UUID("3cf67240-7597-451a-8ec1-fb097afdeb88"),  # На публикацию
     ),
 }
 

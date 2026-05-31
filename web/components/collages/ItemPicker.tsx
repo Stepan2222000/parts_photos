@@ -20,6 +20,7 @@ const FILTER_HINT: Record<string, string> = {
   personal: "только personal-экземпляры",
   defect: "только дефектные",
   not_defect: "любые экземпляры, кроме дефектных",
+  not_new: "personal и дефектные (new сюда нельзя)",
 };
 
 export default function ItemPicker({

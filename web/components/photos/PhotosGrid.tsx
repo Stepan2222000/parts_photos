@@ -253,7 +253,7 @@ export default function PhotosGrid({ collageId, groupId, ownerId, photos: initia
   useEffect(() => {
     let alive = true;
     // Collage-scoped: targets are routed by this collage's item condition
-    // (personal → Реальные, defect → Дефектные на публикацию).
+    // (personal/defect → «На публикацию»; new → none, it goes to «Эталонные»).
     api.collages
       .moveTargets(collageId)
       .then((t) => alive && setMoveTargets(t))

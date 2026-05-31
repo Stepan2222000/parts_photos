@@ -636,11 +636,9 @@ function ManualLookup({
 const SOURCE_LABELS: { key: string; label: string }[] = [
   { key: "upload", label: "Fresh upload (с диска)" },
   { key: "ae697d8d-e803-42c4-9982-ecefbf8a8cdf", label: "Эталонные на публикацию" },
-  { key: "3cf67240-7597-451a-8ec1-fb097afdeb88", label: "Реальные на публикацию" },
-  { key: "a1790194-efa0-4dda-bed4-d8bc15b3b624", label: "Дефектные на публикацию" },
+  { key: "3cf67240-7597-451a-8ec1-fb097afdeb88", label: "На публикацию" },
   { key: "fa0df9bb-f285-4eb2-ab46-cd24e520a4e1", label: "Avito 2-й аккаунт" },
   { key: "721bf726-cdda-4ca8-bf22-f345ca0f677b", label: "Реальные фотографии" },
-  { key: "edce2987-daae-4339-8330-8cb96ad912bf", label: "Дефектные фотографии" },
 ];
 
 function RulesModal({

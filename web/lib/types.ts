@@ -1,5 +1,5 @@
 export type OwnerKind = "smart_part" | "instance";
-export type ConditionFilter = "personal" | "defect" | "not_defect" | "any";
+export type ConditionFilter = "personal" | "defect" | "not_defect" | "not_new" | "any";
 export type PhotoState = "pending" | "uploaded" | "failed" | "deleted";
 
 export interface Group {
@@ -156,7 +156,7 @@ export interface TargetGroup {
   id: string;
   name: string;
   owner_kind: "smart_part" | "instance";
-  condition_filter: "personal" | "defect" | "not_defect" | "any";
+  condition_filter: ConditionFilter;
 }
 
 export interface TransferRules {
