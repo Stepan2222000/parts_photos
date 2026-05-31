@@ -649,7 +649,7 @@ async def _do_transfer(
         ctx = await conn.fetchrow(
             """
             SELECT j.id, j.status, j.result_s3_key, j.result_size_bytes,
-                   j.transferred_to_photo_id, j.source_kind,
+                   j.transferred_to_photo_id, j.source_kind, j.source_photo_id,
                    sc.group_id AS source_group_id
             FROM studio_jobs j
             LEFT JOIN photos sp ON sp.id = j.source_photo_id
@@ -820,6 +820,20 @@ async def _do_transfer(
                 """,
                 photo_id, job_id,
             )
+
+            # Source consumed on accept for direct-move routes (Реальные → На
+            # публикацию): the published AI result replaces the raw frame, so it
+            # leaves «Реальные». Same invariant as a physical move. Other routes
+            # (→ Эталонные, library sources) keep the source. Soft-delete only —
+            # the S3 object is retained, like any image delete.
+            if ctx["source_photo_id"] is not None and gconfig.is_direct_move_allowed(
+                ctx["source_group_id"], group_id
+            ):
+                await conn.execute(
+                    "UPDATE photos SET state = 'deleted', deleted_at = now() "
+                    "WHERE id = $1 AND state = 'uploaded'",
+                    ctx["source_photo_id"],
+                )
     photo_dict = dict(row)
     photo_dict["url"] = public_url(photo_dict["s3_key"])
     return Photo(**photo_dict)

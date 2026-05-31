@@ -131,4 +131,61 @@ class OwnerSearchResult(BaseModel):
     articles: list[str] = []
 
 
+# ── Photo gaps (заполнение пробелов в публикационных каналах) ────────────────
+
+GapKind = Literal["reference", "personal", "defect"]
+
+
+class GapCounts(BaseModel):
+    reference: int
+    personal: int
+    defect: int
+
+
+class GapRow(BaseModel):
+    """One missing-photo slot. `reference` is smart_part-level; `personal`/
+    `defect` are instance-level. Availability counts say what can fill it."""
+    kind: GapKind
+    smart_part_id: str | None = None
+    item_id: int | None = None
+    name: str | None = None
+    articles: list[str] = []
+    condition: str | None = None
+    condition_note: str | None = None
+    in_stock_count: int = 1  # reference: how many in_stock new instances
+    real_photos: int = 0      # pickable real photos available
+    free_collages: int = 0    # library collages available
+    # Target channel coordinates — pass straight to /gaps/fill (and Studio).
+    target_group_id: UUID
+    target_owner_kind: OwnerKind
+    target_owner_id: str
+    # Existing (empty) target collage to reuse, if any.
+    target_collage_id: UUID | None = None
+
+
+class GapSourceCollage(BaseModel):
+    collage_id: UUID
+    group_id: UUID
+    group_name: str | None = None
+    owner_kind: OwnerKind | None = None
+    owner_id: str | None = None
+    title: str | None = None
+    item_id: int | None = None
+    condition: str | None = None
+    photos: list["Photo"] = []
+
+
+class GapSources(BaseModel):
+    real: list[GapSourceCollage] = []
+    free: list[GapSourceCollage] = []
+
+
+class GapFillRequest(BaseModel):
+    target_group_id: UUID
+    target_owner_kind: OwnerKind
+    target_owner_id: str = Field(min_length=1, max_length=200)
+    photo_ids: list[UUID] = Field(min_length=1)
+
+
 CollageDetail.model_rebuild()
+GapSourceCollage.model_rebuild()
