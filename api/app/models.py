@@ -33,6 +33,9 @@ class Group(BaseModel):
     # The frontend shows an optional smart-picker + a required title field.
     owner_optional: bool = False
     title_required: bool = False
+    # Library only: owner may be EITHER a smart_part OR an instance, optional.
+    # The frontend shows a binding-type switch (none / smart / item).
+    owner_free: bool = False
 
 
 class GroupPositionUpdate(BaseModel):

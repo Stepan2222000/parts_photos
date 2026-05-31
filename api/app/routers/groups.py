@@ -47,7 +47,7 @@ async def list_groups() -> list[Group]:
     out: list[Group] = []
     for r in rows:
         owner_kind, condition_filter = _creation_mode(r["id"])
-        owner_optional, title_required = gconfig.creation_flags(r["id"])
+        owner_optional, title_required, owner_free = gconfig.creation_flags(r["id"])
         out.append(Group(
             **dict(r),
             owner_kind=owner_kind,
@@ -55,6 +55,7 @@ async def list_groups() -> list[Group]:
             allows_video=gconfig.allows_video(r["id"]),
             owner_optional=owner_optional,
             title_required=title_required,
+            owner_free=owner_free,
         ))
     return out
 

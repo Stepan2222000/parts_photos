@@ -36,6 +36,9 @@ export default function OwnerCard({ collage, thumbUrl }: Props) {
           {collage.owner_kind === "instance" && collage.owner_condition === "personal" && (
             <span className={s.defect}>personal</span>
           )}
+          {collage.owner_kind === "instance" && collage.owner_condition === "new" && (
+            <span className={s.defect}>новое</span>
+          )}
         </div>
         <div className={s.name}>
           {collage.title?.trim()

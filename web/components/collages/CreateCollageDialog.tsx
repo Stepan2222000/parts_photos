@@ -15,8 +15,11 @@ interface Props {
   conditionFilter: ConditionFilter | null;
   ownerOptional?: boolean;
   titleRequired?: boolean;
+  ownerFree?: boolean;
   onClose: () => void;
 }
+
+type BindKind = "none" | "smart" | "item";
 
 export default function CreateCollageDialog({
   groupId,
@@ -24,6 +27,7 @@ export default function CreateCollageDialog({
   conditionFilter,
   ownerOptional = false,
   titleRequired = false,
+  ownerFree = false,
   onClose,
 }: Props) {
   const router = useRouter();
@@ -33,6 +37,9 @@ export default function CreateCollageDialog({
   // ── smart_part / library branch state ──
   const [owner, setOwner] = useState<OwnerSearchResult | null>(null);
   const [title, setTitle] = useState("");
+  // ── library binding state ──
+  const [bindKind, setBindKind] = useState<BindKind>("none");
+  const [pickedItem, setPickedItem] = useState<ItemSearchResult | null>(null);
 
   function goToCollage(id: string, fresh: boolean) {
     onClose();
@@ -40,7 +47,7 @@ export default function CreateCollageDialog({
     router.refresh();
   }
 
-  // ── library branch: required title + OPTIONAL smart binding ──
+  // ── library branch: required title + OPTIONAL binding (smart OR item) ──
   async function createLibrary(e: React.FormEvent) {
     e.preventDefault();
     const t = title.trim();
@@ -48,19 +55,27 @@ export default function CreateCollageDialog({
       setErr("Введи название коллажа");
       return;
     }
+    if (bindKind === "smart" && !owner) {
+      setErr("Выбери запчасть или сними привязку");
+      return;
+    }
+    if (bindKind === "item" && !pickedItem) {
+      setErr("Выбери экземпляр или сними привязку");
+      return;
+    }
     setBusy(true);
     setErr(null);
+    let binding: { owner_kind?: "smart_part" | "instance"; owner_id?: string } = {};
+    if (bindKind === "smart" && owner) {
+      binding = { owner_kind: "smart_part", owner_id: owner.smart_id };
+    } else if (bindKind === "item" && pickedItem) {
+      binding = { owner_kind: "instance", owner_id: String(pickedItem.item_id) };
+    }
     try {
-      const c = await api.collages.create({
-        group_id: groupId,
-        title: t,
-        ...(owner ? { owner_kind: "smart_part", owner_id: owner.smart_id } : {}),
-      });
+      const c = await api.collages.create({ group_id: groupId, title: t, ...binding });
       goToCollage(c.id, true);
     } catch (e) {
-      if (e instanceof ApiError && e.status === 422 && owner) {
-        setErr(`Запчасть ${owner.smart_id} не найдена в каталоге smart.`);
-      } else if (e instanceof ApiError) {
+      if (e instanceof ApiError) {
         setErr(`Не удалось создать: ${e.body}`);
       } else {
         setErr(String(e));
@@ -124,13 +139,19 @@ export default function CreateCollageDialog({
     }
   }
 
-  const maxWidth = ownerOptional ? 480 : ownerKind === "instance" ? 540 : 460;
+  const maxWidth = ownerFree ? 540 : ownerKind === "instance" ? 540 : 460;
+
+  const BIND_OPTS: { key: BindKind; label: string }[] = [
+    { key: "none", label: "Без привязки" },
+    { key: "smart", label: "Запчасть" },
+    { key: "item", label: "Экземпляр" },
+  ];
 
   if (typeof document === "undefined") return null;
   return createPortal(
     <div className={s.backdrop} onClick={onClose}>
       <div className={s.dialog} onClick={(e) => e.stopPropagation()} style={{ maxWidth }}>
-        {ownerOptional ? (
+        {ownerFree ? (
           <form onSubmit={createLibrary} style={{ display: "contents" }}>
             <h2 className={s.title}>Новый коллаж.</h2>
             <div className={s.field}>
@@ -146,10 +167,46 @@ export default function CreateCollageDialog({
             </div>
             <div className={s.field}>
               <label className={s.label}>
-                Запчасть <span style={{ color: "var(--text-faint)", fontWeight: 400 }}>· необязательно</span>
+                Привязка <span style={{ color: "var(--text-faint)", fontWeight: 400 }}>· необязательно</span>
               </label>
-              <OwnerSearch selected={owner} onChange={setOwner} />
+              <div style={{ display: "flex", gap: 6 }}>
+                {BIND_OPTS.map((o) => (
+                  <button
+                    key={o.key}
+                    type="button"
+                    onClick={() => setBindKind(o.key)}
+                    style={{
+                      flex: 1,
+                      height: 32,
+                      borderRadius: 7,
+                      fontSize: 13,
+                      fontFamily: "inherit",
+                      cursor: "pointer",
+                      border: bindKind === o.key ? "1px solid var(--brand-coral)" : "1px solid var(--border-strong)",
+                      background: bindKind === o.key ? "var(--brand-coral-soft, rgba(204,120,92,0.12))" : "transparent",
+                      color: bindKind === o.key ? "var(--brand-coral-active)" : "var(--text-muted)",
+                    }}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
             </div>
+            {bindKind === "smart" && (
+              <div className={s.field}>
+                <OwnerSearch selected={owner} onChange={setOwner} />
+              </div>
+            )}
+            {bindKind === "item" && (
+              <ItemPicker
+                groupId={groupId}
+                conditionFilter={null}
+                busy={busy}
+                selectMode
+                selectedId={pickedItem?.item_id ?? null}
+                onPick={(it) => setPickedItem(it)}
+              />
+            )}
             {err && <div className={s.error}>{err}</div>}
             <div className={s.actions}>
               <button type="button" className={s.btn} onClick={onClose} disabled={busy}>

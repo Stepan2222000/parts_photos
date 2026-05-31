@@ -10,6 +10,7 @@ interface Props {
   conditionFilter: ConditionFilter | null;
   ownerOptional?: boolean;
   titleRequired?: boolean;
+  ownerFree?: boolean;
 }
 
 const BTN: React.CSSProperties = {
@@ -30,6 +31,7 @@ export default function NewCollageButton({
   conditionFilter,
   ownerOptional = false,
   titleRequired = false,
+  ownerFree = false,
 }: Props) {
   const [open, setOpen] = useState(false);
 
@@ -78,6 +80,7 @@ export default function NewCollageButton({
           conditionFilter={conditionFilter}
           ownerOptional={ownerOptional}
           titleRequired={titleRequired}
+          ownerFree={ownerFree}
           onClose={() => setOpen(false)}
         />
       )}

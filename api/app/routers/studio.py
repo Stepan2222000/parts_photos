@@ -589,17 +589,17 @@ async def lookup_item_search(
 ) -> ItemSearchResponse:
     """Unified item search for the manual instance-collage picker.
 
-    Accepts any instance group that has a creation mode (owner_kind=instance and
-    studio_role != 'none'); "Поступления" (role none) and smart_part groups are
-    rejected — no silent fallback.
+    Accepts instance groups with a creation mode, plus the free-form library
+    (owner_free — any item can be bound as a label). "Поступления" (role none)
+    and plain smart_part target groups are rejected — no silent fallback.
     """
     cfg = gconfig.get(group_id)
     if cfg is None or cfg.studio_role == "none":
         raise HTTPException(400, "group has no instance-collage creation mode")
-    if cfg.owner_kind != "instance":
+    if cfg.owner_kind != "instance" and not cfg.owner_free:
         raise HTTPException(400, "this group is not item-based")
     async with pool().acquire() as conn:
-        parts_matched, rows = await search_items(q, group_id, conn, limit)
+        parts_matched, rows = await search_items(q, group_id, conn, limit, free=cfg.owner_free)
     return ItemSearchResponse(
         parts_matched=parts_matched,
         results=[ItemSearchResult(**r) for r in rows],
@@ -673,6 +673,36 @@ async def _do_transfer(
                 400,
                 "Transfer forbidden by source→target rules",
             )
+
+        # Per-item defect guard. The matrix check above is group-level, but
+        # «Реальные фотографии» now mixes conditions, so a target that refuses
+        # defect sources (Эталонные) must reject a defect item individually.
+        if not cfg.accepts_defect_sources:
+            srow = await conn.fetchrow(
+                """
+                SELECT sc.owner_kind, sc.owner_id
+                FROM studio_jobs j
+                JOIN photos sp ON sp.id = j.source_photo_id
+                JOIN photo_collages sc ON sc.id = sp.collage_id
+                WHERE j.id = $1
+                """,
+                job_id,
+            )
+            if srow and srow["owner_kind"] == "instance" and srow["owner_id"]:
+                try:
+                    sid = int(srow["owner_id"])
+                except (TypeError, ValueError):
+                    sid = None
+                if sid is not None:
+                    src_cond = await conn.fetchval(
+                        "SELECT condition FROM uchet_ext.items WHERE id = $1", sid
+                    )
+                    if src_cond == "defect":
+                        raise HTTPException(
+                            400,
+                            "Дефектный источник нельзя переносить в эту группу "
+                            "(референс не делаем из дефектного фото)",
+                        )
 
         # Resolve owner_id depending on the target's owner_kind.
         if cfg.owner_kind == "instance":

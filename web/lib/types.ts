@@ -22,6 +22,9 @@ export interface Group {
   // collage carries a required free-text title.
   owner_optional: boolean;
   title_required: boolean;
+  // Library only: binding may be smart_part OR instance (frontend shows a
+  // none/smart/item switch).
+  owner_free: boolean;
 }
 
 export interface Collage {

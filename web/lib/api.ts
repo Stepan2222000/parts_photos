@@ -79,6 +79,8 @@ export const api = {
       title?: string;
     }) => req<Collage>("/collages", { method: "POST", body: JSON.stringify(body) }),
     get: (id: string) => req<CollageDetail>(`/collages/${id}`),
+    // Publication channels valid for THIS collage (routed by item condition).
+    moveTargets: (id: string) => req<MoveTarget[]>(`/collages/${id}/move-targets`),
     delete: (id: string) => req<void>(`/collages/${id}`, { method: "DELETE" }),
     reorder: (id: string, updates: { photo_id: string; position: number }[]) =>
       req<void>(`/collages/${id}/positions`, {

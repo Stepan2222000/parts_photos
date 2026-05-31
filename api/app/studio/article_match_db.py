@@ -264,6 +264,13 @@ FROM uchet_ext.items
 WHERE smart_part_id = ANY($1::text[]) AND status = 'in_stock'
 """
 
+# Free-form library: any item can be bound as a label, in_stock or not.
+_ITEMS_FOR_PARTS_ANY = """
+SELECT id, smart_part_id, condition, condition_note, status
+FROM uchet_ext.items
+WHERE smart_part_id = ANY($1::text[])
+"""
+
 _ITEM_FULL_BY_ID = """
 SELECT id, smart_part_id, condition, condition_note, status
 FROM uchet_ext.items
@@ -309,7 +316,8 @@ def _rank(q: str, q_int: int | None, item_id: int, smart_id: str,
 
 
 async def search_items(
-    q: str, group_id: UUID, conn: "asyncpg.Connection", limit: int = _ITEM_LIMIT
+    q: str, group_id: UUID, conn: "asyncpg.Connection", limit: int = _ITEM_LIMIT,
+    free: bool = False,
 ) -> tuple[int, list[dict]]:
     """Unified item search for an instance group's manual picker.
 
@@ -320,13 +328,17 @@ async def search_items(
       (in_stock + passes condition_filter) are returned;
     - id path (q is an integer): the exact item is always returned, flagged with
       `selectable`/`block_reason`, so the UI can show *why* it can't be picked.
+
+    `free=True` (the library): any item can be bound as a label — no in_stock or
+    condition gate, everything is selectable, and no "already exists" flag (the
+    library allows many collages per item).
     """
     cfg = gconfig.get(group_id)
     if cfg is None:
         return 0, []
 
     def passes(condition: str) -> bool:
-        return gconfig.condition_allowed(condition, cfg.condition_filter)
+        return free or gconfig.condition_allowed(condition, cfg.condition_filter)
 
     pattern = f"%{q}%"
     part_rows = await conn.fetch(_PARTS_BY_TEXT, pattern, q, _PART_LIMIT)
@@ -335,7 +347,8 @@ async def search_items(
 
     text_items: list = []
     if part_map:
-        text_items = await conn.fetch(_ITEMS_FOR_PARTS, list(part_map.keys()))
+        query = _ITEMS_FOR_PARTS_ANY if free else _ITEMS_FOR_PARTS
+        text_items = await conn.fetch(query, list(part_map.keys()))
 
     q_int: int | None = None
     qs = q.strip()
@@ -369,9 +382,14 @@ async def search_items(
         for r in await conn.fetch(_PARTS_BY_IDS, list(missing)):
             part_map[r["id"]] = r
 
-    item_ids_text = [str(i) for i in candidates]
-    ex_rows = await conn.fetch(_INSTANCE_COLLAGES_ONE_GROUP, group_id, item_ids_text)
-    existing = {r["owner_id"]: str(r["id"]) for r in ex_rows}
+    # Library allows many collages per item, so we never surface an "existing"
+    # collage to block creation there.
+    if free:
+        existing: dict[str, str] = {}
+    else:
+        item_ids_text = [str(i) for i in candidates]
+        ex_rows = await conn.fetch(_INSTANCE_COLLAGES_ONE_GROUP, group_id, item_ids_text)
+        existing = {r["owner_id"]: str(r["id"]) for r in ex_rows}
 
     results: list[dict] = []
     for iid, it in candidates.items():
@@ -380,9 +398,12 @@ async def search_items(
         articles = list(part["articles"] or []) if part else []
         in_stock = it["status"] == "in_stock"
         pf = passes(it["condition"])
-        selectable = in_stock and pf
+        # Library: any existing item is bindable as a label, in_stock or not.
+        selectable = True if free else (in_stock and pf)
         block = None
-        if not in_stock:
+        if free:
+            block = None
+        elif not in_stock:
             block = "нет на складе"
         elif not pf:
             if cfg.condition_filter == "personal":

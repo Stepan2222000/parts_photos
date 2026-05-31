@@ -58,12 +58,15 @@ async def search_owners(
     ]
 
 
-async def validate_owner_exists(kind: str, owner_id: str, group_id: UUID) -> None:
+async def validate_owner_exists(
+    kind: str, owner_id: str, group_id: UUID, strict: bool = True
+) -> None:
     """Validate that `owner_id` is a real, eligible owner for `group_id`.
 
     No silent fallbacks — every failure is an explicit 422 with a reason. For
     `instance` eligibility uses the group's `condition_filter` and requires the
-    item to be in stock.
+    item to be in stock — UNLESS `strict=False` (the free-form library), where an
+    item binding is just a label, so we only check the item exists.
     """
     if kind == "smart_part":
         exists = await pool().fetchval(
@@ -88,6 +91,8 @@ async def validate_owner_exists(kind: str, owner_id: str, group_id: UUID) -> Non
         )
         if item is None:
             raise HTTPException(422, f"item {item_id} not found in parts_uchet")
+        if not strict:
+            return  # library: existence-only, the binding is just a label
         if item["status"] != "in_stock":
             raise HTTPException(
                 422, f"item {item_id} status={item['status']!r}, not in_stock"

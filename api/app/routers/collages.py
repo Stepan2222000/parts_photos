@@ -12,6 +12,7 @@ from ..models import (
     CollageCreate,
     CollageDetail,
     CollageTransferRequest,
+    MoveTarget,
     Photo,
 )
 from ..studio import groups as gconfig
@@ -212,12 +213,20 @@ async def create_collage(payload: CollageCreate) -> Collage:
 
     owner_kind = payload.owner_kind
     owner_id = payload.owner_id
-    # Free-form library: smart binding is optional. Omitting the owner is fine;
-    # if one is given it must still be the group's owner_kind and a real smart.
-    if cfg.owner_optional and not owner_id:
+    if (cfg.owner_optional or cfg.owner_free) and not owner_id:
+        # Library: binding is optional — an unbound collage is fine.
         owner_kind = None
         owner_id = None
+    elif cfg.owner_free:
+        # Library with a binding: owner may be EITHER a smart_part OR an instance,
+        # validated existence-only (the binding is just a label).
+        if owner_kind not in ("smart_part", "instance"):
+            raise HTTPException(
+                422, f"owner_kind must be 'smart_part' or 'instance', got {owner_kind!r}"
+            )
+        await validate_owner_exists(owner_kind, owner_id, payload.group_id, strict=False)
     else:
+        # Every other group: owner is mandatory and must match the group's kind.
         if owner_kind != cfg.owner_kind:
             raise HTTPException(
                 422,
@@ -301,6 +310,52 @@ async def get_collage(collage_id: UUID) -> CollageDetail:
             detail.owner_condition = m["condition"]
             detail.owner_condition_note = m["condition_note"]
     return detail
+
+
+@router.get("/collages/{collage_id}/move-targets", response_model=list[MoveTarget])
+async def list_collage_move_targets(collage_id: UUID) -> list[MoveTarget]:
+    """Publication channels this collage's raw photos may be physically moved
+    into — narrowed to the ones the bound item's condition actually fits. With
+    «Реальные фотографии» now mixing conditions, a personal collage routes to
+    «Реальные на публикацию» and a defect one to «Дефектные на публикацию»."""
+    head = await pool().fetchrow(
+        "SELECT group_id, owner_kind, owner_id FROM photo_collages WHERE id = $1",
+        collage_id,
+    )
+    if head is None:
+        raise HTTPException(404, "Collage not found")
+
+    candidates = gconfig.direct_move_targets(head["group_id"])
+    if not candidates:
+        return []
+
+    # Instance collage: keep only targets whose condition_filter the item matches.
+    if head["owner_kind"] == "instance" and head["owner_id"]:
+        try:
+            item_id = int(head["owner_id"])
+        except (TypeError, ValueError):
+            item_id = None
+        cond = (
+            await pool().fetchval(
+                "SELECT condition FROM uchet_ext.items WHERE id = $1", item_id
+            )
+            if item_id is not None
+            else None
+        )
+        if cond is not None:
+            candidates = [
+                t for t in candidates
+                if (cfg := gconfig.get(t)) is not None
+                and gconfig.condition_allowed(cond, cfg.condition_filter)
+            ]
+
+    if not candidates:
+        return []
+    rows = await pool().fetch(
+        "SELECT id, name FROM photo_groups WHERE id = ANY($1::uuid[]) ORDER BY position ASC",
+        candidates,
+    )
+    return [MoveTarget(id=r["id"], name=r["name"]) for r in rows]
 
 
 @router.post("/collages/{collage_id}/transfer", response_model=list[Photo])

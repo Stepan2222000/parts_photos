@@ -40,6 +40,10 @@ class GroupConfig:
     # (см. partial-index в migration_006) — на один smart можно много коллажей.
     owner_optional: bool = False
     title_required: bool = False
+    # Свободная библиотека: владельца можно выбрать ЛЮБОГО вида (smart_part ИЛИ
+    # instance) и необязательно; привязка — метка. Для instance проверяем только
+    # существование item (без in_stock / фильтра состояния).
+    owner_free: bool = False
 
 
 # Фиксированный id свободной библиотеки (см. migration_006_library_collages.sql).
@@ -63,13 +67,11 @@ GROUP_SETTINGS: dict[UUID, GroupConfig] = {
     # Поступления — outside Studio entirely.
     UUID("b66cc603-0bf2-4010-a602-a871f56d3e66"):
         GroupConfig("none", "instance", "any"),
-    # Реальные фотографии — instance, source-only; любые НЕ-дефектные (new+personal).
-    # Единственные (вместе с «Дефектными»), куда можно грузить видео.
+    # Реальные фотографии — instance, source-only; принимает ЛЮБОЕ состояние
+    # (new/personal/defect), бейджи различают. Бывшая «Дефектные фотографии»
+    # влита сюда. Куда грузить видео — тоже сюда.
     UUID("721bf726-cdda-4ca8-bf22-f345ca0f677b"):
-        GroupConfig("source", "instance", "not_defect", allows_video=True),
-    # Дефектные фотографии — instance, defect-condition, source-only.
-    UUID("edce2987-daae-4339-8330-8cb96ad912bf"):
-        GroupConfig("source", "instance", "defect", allows_video=True),
+        GroupConfig("source", "instance", "any", allows_video=True),
     # Свободные коллажи — свободная библиотека. Источник для Studio (апгрейд,
     # замена фона), откуда результат можно перенести В ЛЮБОЙ канал (эталонные/
     # реальные/дефектные/Avito) — владелец цели выбирается в момент переноса.
@@ -79,7 +81,7 @@ GROUP_SETTINGS: dict[UUID, GroupConfig] = {
         GroupConfig(
             "source", "smart_part", "any",
             accepts_defect_sources=True, allows_video=True,
-            owner_optional=True, title_required=True,
+            owner_optional=True, title_required=True, owner_free=True,
         ),
 }
 
@@ -91,7 +93,6 @@ GROUP_NAMES: dict[UUID, str] = {
     UUID("fa0df9bb-f285-4eb2-ab46-cd24e520a4e1"): "Avito 2-й аккаунт",
     UUID("b66cc603-0bf2-4010-a602-a871f56d3e66"): "Поступления",
     UUID("721bf726-cdda-4ca8-bf22-f345ca0f677b"): "Реальные фотографии",
-    UUID("edce2987-daae-4339-8330-8cb96ad912bf"): "Дефектные фотографии",
     LIBRARY_GROUP_ID: "Свободные коллажи",
 }
 
@@ -100,13 +101,13 @@ def get(group_id: UUID) -> GroupConfig | None:
     return GROUP_SETTINGS.get(group_id)
 
 
-def creation_flags(group_id: UUID) -> tuple[bool, bool]:
-    """(owner_optional, title_required) for a group's manual-creation mode.
-    (False, False) when the group has no creation mode (absent / role=none)."""
+def creation_flags(group_id: UUID) -> tuple[bool, bool, bool]:
+    """(owner_optional, title_required, owner_free) for a group's manual-creation
+    mode. All False when the group has no creation mode (absent / role=none)."""
     cfg = GROUP_SETTINGS.get(group_id)
     if cfg is None or cfg.studio_role == "none":
-        return False, False
-    return cfg.owner_optional, cfg.title_required
+        return False, False, False
+    return cfg.owner_optional, cfg.title_required, cfg.owner_free
 
 
 def allows_video(group_id: UUID) -> bool:
@@ -191,13 +192,12 @@ def assert_item_condition_allowed(item_condition: str, group_id: UUID) -> None:
 # matrix, which also permits e.g. Реальные→Эталонные / Avito2). Here each source
 # maps to exactly its own publication channel.
 DIRECT_MOVE_TARGETS: dict[UUID, tuple[UUID, ...]] = {
-    # Реальные фотографии → Реальные на публикацию
+    # Реальные фотографии → Реальные ИЛИ Дефектные на публикацию. Конкретный
+    # канал выбирается по состоянию коллажа (personal → Реальные, defect →
+    # Дефектные); см. collage-scoped move-targets и assert_item_condition_allowed.
     UUID("721bf726-cdda-4ca8-bf22-f345ca0f677b"): (
-        UUID("3cf67240-7597-451a-8ec1-fb097afdeb88"),
-    ),
-    # Дефектные фотографии → Дефектные на публикацию
-    UUID("edce2987-daae-4339-8330-8cb96ad912bf"): (
-        UUID("a1790194-efa0-4dda-bed4-d8bc15b3b624"),
+        UUID("3cf67240-7597-451a-8ec1-fb097afdeb88"),  # Реальные на публикацию
+        UUID("a1790194-efa0-4dda-bed4-d8bc15b3b624"),  # Дефектные на публикацию
     ),
 }
 

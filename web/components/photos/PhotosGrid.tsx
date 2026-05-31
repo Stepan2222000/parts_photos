@@ -252,14 +252,16 @@ export default function PhotosGrid({ collageId, groupId, ownerId, photos: initia
 
   useEffect(() => {
     let alive = true;
-    api.groups
-      .moveTargets(groupId)
+    // Collage-scoped: targets are routed by this collage's item condition
+    // (personal → Реальные, defect → Дефектные на публикацию).
+    api.collages
+      .moveTargets(collageId)
       .then((t) => alive && setMoveTargets(t))
       .catch(() => alive && setMoveTargets([]));
     return () => {
       alive = false;
     };
-  }, [groupId]);
+  }, [collageId]);
 
   useEffect(() => {
     setPhotos(initialPhotos);

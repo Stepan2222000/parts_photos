@@ -10,6 +10,10 @@ interface Props {
   conditionFilter: ConditionFilter | null;
   busy: boolean;
   onPick: (item: ItemSearchResult) => void;
+  // Library mode: clicking just *selects* an item (parent creates later with a
+  // title); `selectedId` highlights the current pick.
+  selectMode?: boolean;
+  selectedId?: number | null;
 }
 
 const FILTER_HINT: Record<string, string> = {
@@ -18,7 +22,14 @@ const FILTER_HINT: Record<string, string> = {
   not_defect: "любые экземпляры, кроме дефектных",
 };
 
-export default function ItemPicker({ groupId, conditionFilter, busy, onPick }: Props) {
+export default function ItemPicker({
+  groupId,
+  conditionFilter,
+  busy,
+  onPick,
+  selectMode = false,
+  selectedId = null,
+}: Props) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<ItemSearchResult[]>([]);
   const [partsMatched, setPartsMatched] = useState(0);
@@ -61,6 +72,11 @@ export default function ItemPicker({ groupId, conditionFilter, busy, onPick }: P
 
   function handlePick(it: ItemSearchResult) {
     if (busy) return;
+    if (selectMode) {
+      if (!it.selectable) return;
+      onPick(it); // parent stores the selection; no create yet
+      return;
+    }
     if (!it.selectable && !it.existing_collage_id) return;
     setPickingId(it.item_id);
     onPick(it);
@@ -107,14 +123,17 @@ export default function ItemPicker({ groupId, conditionFilter, busy, onPick }: P
         )}
 
         {results.map((it) => {
-          const isExisting = !!it.existing_collage_id;
-          const clickable = !busy && (it.selectable || isExisting);
+          const isExisting = !selectMode && !!it.existing_collage_id;
+          const isSelected = selectMode && selectedId === it.item_id;
+          const clickable = selectMode
+            ? it.selectable
+            : !busy && (it.selectable || isExisting);
           const picking = pickingId === it.item_id && busy;
           return (
             <button
               key={it.item_id}
               type="button"
-              className={`${s.row} ${!clickable ? s.rowDisabled : ""} ${isExisting ? s.rowExisting : ""}`}
+              className={`${s.row} ${!clickable ? s.rowDisabled : ""} ${isExisting || isSelected ? s.rowExisting : ""}`}
               onClick={() => handlePick(it)}
               disabled={!clickable}
               title={it.block_reason || undefined}
@@ -131,7 +150,10 @@ export default function ItemPicker({ groupId, conditionFilter, busy, onPick }: P
               <span className={s.tags}>
                 {it.condition === "defect" && <span className={s.defectChip}>дефект</span>}
                 {it.condition === "personal" && <span className={s.defectChip}>personal</span>}
-                {isExisting ? (
+                {it.condition === "new" && <span className={s.defectChip}>новое</span>}
+                {selectMode ? (
+                  <span className={s.addChip}>{isSelected ? "выбрано ✓" : "выбрать"}</span>
+                ) : isExisting ? (
                   <span className={s.existChip}>открыть →</span>
                 ) : !it.selectable ? (
                   <span className={s.blockChip}>{it.block_reason}</span>

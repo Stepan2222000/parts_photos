@@ -1,5 +1,5 @@
 import Shell from "@/components/shell/Shell";
-import CollageGrid from "@/components/collages/CollageGrid";
+import GroupCollages from "@/components/collages/GroupCollages";
 import NewCollageButton from "@/components/collages/NewCollageButton";
 import { api } from "@/lib/api";
 import GroupSearch from "./GroupSearch";
@@ -39,6 +39,7 @@ export default async function GroupPage({ params, searchParams }: Props) {
           conditionFilter={active.condition_filter}
           ownerOptional={active.owner_optional}
           titleRequired={active.title_required}
+          ownerFree={active.owner_free}
         />
       }
     >
@@ -79,7 +80,7 @@ export default async function GroupPage({ params, searchParams }: Props) {
           Ничего не найдено.
         </div>
       ) : (
-        <CollageGrid collages={collages} />
+        <GroupCollages collages={collages} showFilter={active.owner_kind === "instance"} />
       )}
     </Shell>
   );
