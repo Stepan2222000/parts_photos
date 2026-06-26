@@ -7,16 +7,16 @@ services:
       - "3200:8001"
     environment:
       PG_DSN: postgresql://admin:Password123@parts_photos:5432/parts_photos
-      MINIO_ENDPOINT: 194.164.245.107:9000
+      MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: admin
       MINIO_SECRET_KEY: Password123
       MINIO_BUCKET: parts-photos
-      MINIO_PUBLIC_BASE: http://194.164.245.107:9000/parts-photos
+      MINIO_PUBLIC_BASE: https://s3.parts-everything.site/parts-photos
       MINIO_SECURE: "false"
-      WEB_ORIGIN: http://194.164.245.107:3100
+      WEB_ORIGIN: https://parts-photos.parts-everything.site
       API_PORT: "8001"
       STUDIO_MINIO_BUCKET: parts-photos-studio
-      STUDIO_MINIO_PUBLIC_BASE: http://194.164.245.107:9000/parts-photos-studio
+      STUDIO_MINIO_PUBLIC_BASE: https://s3.parts-everything.site/parts-photos-studio
     networks:
       - db_default
 
@@ -27,19 +27,19 @@ services:
     command: ["python", "-m", "app.studio.worker"]
     environment:
       PG_DSN: postgresql://admin:Password123@parts_photos:5432/parts_photos
-      MINIO_ENDPOINT: 194.164.245.107:9000
+      MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: admin
       MINIO_SECRET_KEY: Password123
       MINIO_BUCKET: parts-photos
-      MINIO_PUBLIC_BASE: http://194.164.245.107:9000/parts-photos
+      MINIO_PUBLIC_BASE: https://s3.parts-everything.site/parts-photos
       MINIO_SECURE: "false"
       STUDIO_MINIO_BUCKET: parts-photos-studio
-      STUDIO_MINIO_PUBLIC_BASE: http://194.164.245.107:9000/parts-photos-studio
+      STUDIO_MINIO_PUBLIC_BASE: https://s3.parts-everything.site/parts-photos-studio
       STUDIO_MIN_WORKERS: "2"
       STUDIO_MAX_WORKERS: "10"
       STUDIO_LOG_LEVEL: INFO
       # Image-edit backend (OpenAI-compatible /images/edits endpoint).
-      STUDIO_OPENAI_BASE_URL: http://194.164.245.107:8317/v1
+      STUDIO_OPENAI_BASE_URL: http://cli-proxy-api:8317/v1
       STUDIO_OPENAI_API_KEY: cliproxy-e2602729e9e53a01885c91350fb852f735ce
       STUDIO_IMAGE_MODEL: gpt-image-2
       STUDIO_IMAGE_QUALITY: auto
@@ -56,7 +56,7 @@ services:
       - "3100:3000"
     environment:
       PHOTOS_API_BASE: http://parts_photos_api:8001
-      NEXT_PUBLIC_PHOTOS_API_BASE: http://194.164.245.107:3200
+      NEXT_PUBLIC_PHOTOS_API_BASE: https://parts-photos.parts-everything.site/api
     depends_on:
       - api
     networks:
