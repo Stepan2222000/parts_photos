@@ -1,4 +1,4 @@
-export type OwnerKind = "smart_part" | "instance";
+export type OwnerKind = "smart_part" | "instance" | "arrival";
 export type ConditionFilter = "personal" | "defect" | "not_defect" | "not_new" | "any";
 export type PhotoState = "pending" | "uploaded" | "failed" | "deleted";
 

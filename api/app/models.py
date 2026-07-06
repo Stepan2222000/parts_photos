@@ -7,7 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
-OwnerKind = Literal["smart_part", "instance"]
+OwnerKind = Literal["smart_part", "instance", "arrival"]
 ConditionFilter = Literal["personal", "defect", "not_defect", "not_new", "any"]
 
 
