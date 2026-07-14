@@ -11,6 +11,7 @@ interface Props {
   ownerOptional?: boolean;
   titleRequired?: boolean;
   ownerFree?: boolean;
+  examplesChannel?: boolean;
 }
 
 const BTN: React.CSSProperties = {
@@ -32,6 +33,7 @@ export default function NewCollageButton({
   ownerOptional = false,
   titleRequired = false,
   ownerFree = false,
+  examplesChannel = false,
 }: Props) {
   const [open, setOpen] = useState(false);
 
@@ -81,6 +83,7 @@ export default function NewCollageButton({
           ownerOptional={ownerOptional}
           titleRequired={titleRequired}
           ownerFree={ownerFree}
+          examplesChannel={examplesChannel}
           onClose={() => setOpen(false)}
         />
       )}

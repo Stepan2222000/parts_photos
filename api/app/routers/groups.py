@@ -48,6 +48,7 @@ async def list_groups() -> list[Group]:
     for r in rows:
         owner_kind, condition_filter = _creation_mode(r["id"])
         owner_optional, title_required, owner_free = gconfig.creation_flags(r["id"])
+        cfg = gconfig.get(r["id"])
         out.append(Group(
             **dict(r),
             owner_kind=owner_kind,
@@ -56,6 +57,7 @@ async def list_groups() -> list[Group]:
             owner_optional=owner_optional,
             title_required=title_required,
             owner_free=owner_free,
+            examples_channel=bool(cfg and cfg.examples_channel),
         ))
     return out
 

@@ -16,6 +16,7 @@ interface Props {
   ownerOptional?: boolean;
   titleRequired?: boolean;
   ownerFree?: boolean;
+  examplesChannel?: boolean;
   onClose: () => void;
 }
 
@@ -28,6 +29,7 @@ export default function CreateCollageDialog({
   ownerOptional = false,
   titleRequired = false,
   ownerFree = false,
+  examplesChannel = false,
   onClose,
 }: Props) {
   const router = useRouter();
@@ -111,6 +113,32 @@ export default function CreateCollageDialog({
     }
   }
 
+  // ── examples branch: required smart + optional title → POST /examples ──
+  async function createExample(e: React.FormEvent) {
+    e.preventDefault();
+    if (!owner) {
+      setErr("Выбери запчасть");
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    const t = title.trim();
+    try {
+      const ex = await api.examples.create({
+        smart_part_id: owner.smart_id,
+        ...(t ? { title: t } : {}),
+      });
+      goToCollage(ex.collage_id, true);
+    } catch (e) {
+      if (e instanceof ApiError) {
+        setErr(`Не удалось создать пример: ${e.body}`);
+      } else {
+        setErr(String(e));
+      }
+      setBusy(false);
+    }
+  }
+
   // ── instance branch: clicking an item creates (or opens existing) ──
   async function pickItem(it: ItemSearchResult) {
     if (it.existing_collage_id) {
@@ -151,7 +179,36 @@ export default function CreateCollageDialog({
   return createPortal(
     <div className={s.backdrop} onClick={onClose}>
       <div className={s.dialog} onClick={(e) => e.stopPropagation()} style={{ maxWidth }}>
-        {ownerFree ? (
+        {examplesChannel ? (
+          <form onSubmit={createExample} style={{ display: "contents" }}>
+            <h2 className={s.title}>Новый пример.</h2>
+            <div className={s.field}>
+              <label className={s.label}>Запчасть</label>
+              <OwnerSearch selected={owner} onChange={setOwner} />
+            </div>
+            <div className={s.field}>
+              <label className={s.label}>
+                Название <span style={{ color: "var(--text-faint)", fontWeight: 400 }}>· необязательно</span>
+              </label>
+              <input
+                className={s.input}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Например: в упаковке, вид сверху"
+                maxLength={200}
+              />
+            </div>
+            {err && <div className={s.error}>{err}</div>}
+            <div className={s.actions}>
+              <button type="button" className={s.btn} onClick={onClose} disabled={busy}>
+                Cancel
+              </button>
+              <button type="submit" className={`${s.btn} ${s.btnPrimary}`} disabled={busy || !owner}>
+                {busy ? "Создаю…" : "Create"}
+              </button>
+            </div>
+          </form>
+        ) : ownerFree ? (
           <form onSubmit={createLibrary} style={{ display: "contents" }}>
             <h2 className={s.title}>Новый коллаж.</h2>
             <div className={s.field}>

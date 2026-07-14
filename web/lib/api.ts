@@ -1,6 +1,7 @@
 import type {
   Collage,
   CollageDetail,
+  Example,
   GapCounts,
   GapKind,
   GapRow,
@@ -144,6 +145,14 @@ export const api = {
   owners: {
     search: (q: string, limit = 20) =>
       req<OwnerSearchResult[]>(`/owners/search?q=${encodeURIComponent(q)}&limit=${limit}`),
+  },
+  // «Примеры с рынка»: пример = коллаж + связь со smart (smart_part_examples).
+  examples: {
+    create: (body: { smart_part_id: string; title?: string }) =>
+      req<Example>("/examples", { method: "POST", body: JSON.stringify(body) }),
+    list: (smartId: string) =>
+      req<Example[]>(`/examples?smart_id=${encodeURIComponent(smartId)}`),
+    delete: (id: string) => req<void>(`/examples/${id}`, { method: "DELETE" }),
   },
   gaps: {
     counts: () => req<GapCounts>("/gaps/counts"),

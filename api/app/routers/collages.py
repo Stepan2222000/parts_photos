@@ -110,7 +110,10 @@ async def _query_collages(
             f"(c.owner_id ILIKE ${i} "
             f"OR c.title ILIKE ${i} "
             f"OR p_meta.name ILIKE ${i} "
-            f"OR EXISTS (SELECT 1 FROM unnest(p_meta.articles) a WHERE a ILIKE ${i}))"
+            f"OR EXISTS (SELECT 1 FROM unnest(p_meta.articles) a WHERE a ILIKE ${i}) "
+            f"OR se.smart_part_id ILIKE ${i} "
+            f"OR p_ex.name ILIKE ${i} "
+            f"OR EXISTS (SELECT 1 FROM unnest(p_ex.articles) a WHERE a ILIKE ${i}))"
         )
 
     where_sql = f"WHERE {' AND '.join(where)}" if where else ""
@@ -132,8 +135,10 @@ async def _query_collages(
         SELECT
             c.id, c.group_id, c.owner_kind, c.owner_id, c.title, c.created_at,
             g.name          AS group_name,
-            p_meta.name     AS owner_name,
-            p_meta.articles AS owner_articles,
+            -- Examples channel: the smart binding lives in smart_part_examples,
+            -- so surface the linked part where the direct owner join is empty.
+            COALESCE(p_meta.name, p_ex.name)         AS owner_name,
+            COALESCE(p_meta.articles, p_ex.articles) AS owner_articles,
             COUNT(ph.id) FILTER (WHERE ph.state = 'uploaded') AS photos_count,
             first_photo.s3_key AS first_key
         FROM photo_collages c
@@ -141,6 +146,8 @@ async def _query_collages(
         LEFT JOIN photos ph ON ph.collage_id = c.id
         LEFT JOIN smart_ext.parts p_meta
                ON c.owner_kind = 'smart_part' AND p_meta.id = c.owner_id
+        LEFT JOIN smart_part_examples se ON se.collage_id = c.id
+        LEFT JOIN smart_ext.parts p_ex ON p_ex.id = se.smart_part_id
         LEFT JOIN LATERAL (
             SELECT s3_key FROM photos
             WHERE collage_id = c.id AND state = 'uploaded'
@@ -149,7 +156,8 @@ async def _query_collages(
             LIMIT 1
         ) first_photo ON true
         {where_sql}
-        GROUP BY c.id, g.name, p_meta.name, p_meta.articles, first_photo.s3_key
+        GROUP BY c.id, g.name, p_meta.name, p_meta.articles,
+                 se.smart_part_id, p_ex.name, p_ex.articles, first_photo.s3_key
         {having}
         -- c.title/c.owner_kind/c.owner_id are functionally dependent on c.id (PK),
         -- so they need no explicit GROUP BY entry.
@@ -207,6 +215,12 @@ async def create_collage(payload: CollageCreate) -> Collage:
     cfg = gconfig.get(payload.group_id)
     if cfg is None or cfg.studio_role == "none":
         raise HTTPException(422, "group is not configured for collage creation")
+    if cfg.examples_channel:
+        # «Примеры с рынка»: связь smart↔коллаж живёт в smart_part_examples —
+        # generic-создание оставило бы коллаж без связи.
+        raise HTTPException(
+            422, "collages in the examples channel are created via POST /examples"
+        )
 
     title = payload.title.strip() if payload.title else None
     if cfg.title_required and not title:
@@ -262,12 +276,14 @@ async def get_collage(collage_id: UUID) -> CollageDetail:
         SELECT
             c.id, c.group_id, c.owner_kind, c.owner_id, c.title,
             g.name AS group_name,
-            p_meta.name     AS owner_name,
-            p_meta.articles AS owner_articles
+            COALESCE(p_meta.name, p_ex.name)         AS owner_name,
+            COALESCE(p_meta.articles, p_ex.articles) AS owner_articles
         FROM photo_collages c
         JOIN photo_groups g ON g.id = c.group_id
         LEFT JOIN smart_ext.parts p_meta
                ON c.owner_kind = 'smart_part' AND p_meta.id = c.owner_id
+        LEFT JOIN smart_part_examples se ON se.collage_id = c.id
+        LEFT JOIN smart_ext.parts p_ex ON p_ex.id = se.smart_part_id
         WHERE c.id = $1
         """,
         collage_id,

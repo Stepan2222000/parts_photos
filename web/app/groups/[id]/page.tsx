@@ -40,6 +40,7 @@ export default async function GroupPage({ params, searchParams }: Props) {
           ownerOptional={active.owner_optional}
           titleRequired={active.title_required}
           ownerFree={active.owner_free}
+          examplesChannel={active.examples_channel}
         />
       }
     >

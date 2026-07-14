@@ -36,6 +36,10 @@ class Group(BaseModel):
     # Library only: owner may be EITHER a smart_part OR an instance, optional.
     # The frontend shows a binding-type switch (none / smart / item).
     owner_free: bool = False
+    # «Примеры с рынка»: collages are created ONLY through POST /examples (the
+    # smart binding lives in smart_part_examples). The frontend routes the
+    # "New collage" dialog to the examples endpoint for this group.
+    examples_channel: bool = False
 
 
 class GroupPositionUpdate(BaseModel):
@@ -187,5 +191,29 @@ class GapFillRequest(BaseModel):
     photo_ids: list[UUID] = Field(min_length=1)
 
 
+# ── Примеры с рынка (positive-референсы реальных фото для VL-моделей) ────────
+
+
+class ExampleCreate(BaseModel):
+    smart_part_id: str = Field(pattern=r"^smart_[0-9]{8}$")
+    # Optional human label shown on the collage card (e.g. «в упаковке, вид сверху»).
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+
+
+class Example(BaseModel):
+    """One market example: a collage in «Примеры с рынка» linked to a smart part
+    via smart_part_examples. Photos are the uploaded images ordered by position."""
+    id: UUID
+    smart_part_id: str
+    collage_id: UUID
+    position: int
+    created_at: datetime
+    title: str | None = None
+    smart_part_name: str | None = None
+    smart_part_articles: list[str] = []
+    photos: list["Photo"] = []
+
+
 CollageDetail.model_rebuild()
 GapSourceCollage.model_rebuild()
+Example.model_rebuild()

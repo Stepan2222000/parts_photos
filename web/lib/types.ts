@@ -25,6 +25,22 @@ export interface Group {
   // Library only: binding may be smart_part OR instance (frontend shows a
   // none/smart/item switch).
   owner_free: boolean;
+  // «Примеры с рынка»: collages are created via POST /examples (smart binding
+  // lives in smart_part_examples). The dialog routes there for this group.
+  examples_channel: boolean;
+}
+
+// «Примеры с рынка» — one market example (collage) linked to a smart part.
+export interface Example {
+  id: string;
+  smart_part_id: string;
+  collage_id: string;
+  position: number;
+  created_at: string;
+  title: string | null;
+  smart_part_name: string | null;
+  smart_part_articles: string[];
+  photos: Photo[];
 }
 
 export interface Collage {

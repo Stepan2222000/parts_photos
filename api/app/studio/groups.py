@@ -44,6 +44,14 @@ class GroupConfig:
     # instance) и необязательно; привязка — метка. Для instance проверяем только
     # существование item (без in_stock / фильтра состояния).
     owner_free: bool = False
+    # «Примеры с рынка»: коллажи создаются ТОЛЬКО через POST /examples (связь
+    # smart↔коллаж живёт в smart_part_examples, owner_id у коллажей NULL).
+    # Generic POST /collages в такую группу — явная 422, не молчаливый обход.
+    examples_channel: bool = False
+    # Источник, чьи фото нельзя выдавать за фото конкретного НАШЕГО экземпляра:
+    # перенос/апгрейд разрешён только в smart_part-цели (Эталонные, Avito 2-й),
+    # instance-цели («На публикацию») закрыты. У примеров с рынка = True.
+    smart_only_source: bool = False
 
 
 # Фиксированные id ключевых каналов (имена в БД могут меняться — id нет).
@@ -52,6 +60,9 @@ PUBLICATION_GROUP_ID = UUID("3cf67240-7597-451a-8ec1-fb097afdeb88")  # На пу
 REAL_GROUP_ID = UUID("721bf726-cdda-4ca8-bf22-f345ca0f677b")  # Реальные фотографии
 # Фиксированный id свободной библиотеки (см. migration_006_library_collages.sql).
 LIBRARY_GROUP_ID = UUID("0a7fbbdf-e605-48f1-a320-ca2094a0f32c")
+# «Примеры с рынка» (см. migration_010_market_examples.sql): positive-референсы
+# реальных фото с чужих объявлений для VL-моделей, привязка в smart_part_examples.
+EXAMPLES_GROUP_ID = UUID("024e74e8-bf6b-45be-bc78-18cf08cc27b9")
 
 
 GROUP_SETTINGS: dict[UUID, GroupConfig] = {
@@ -86,6 +97,16 @@ GROUP_SETTINGS: dict[UUID, GroupConfig] = {
             accepts_defect_sources=True, allows_video=True,
             owner_optional=True, title_required=True, owner_free=True,
         ),
+    # Примеры с рынка — реальные фото из чужих объявлений (Avito/eBay), только
+    # положительные референсы для VL-моделей. Source для Studio (апгрейд из
+    # примера), но smart_only_source: результат идёт только в smart_part-цели —
+    # чужое фото не может стать фото конкретного нашего экземпляра. Создание
+    # коллажей — только POST /examples (examples_channel).
+    EXAMPLES_GROUP_ID:
+        GroupConfig(
+            "source", "smart_part", "any",
+            examples_channel=True, smart_only_source=True,
+        ),
 }
 
 # Convenient aliases used in matching/UI.
@@ -96,6 +117,7 @@ GROUP_NAMES: dict[UUID, str] = {
     UUID("b66cc603-0bf2-4010-a602-a871f56d3e66"): "Поступления",
     UUID("721bf726-cdda-4ca8-bf22-f345ca0f677b"): "Реальные фотографии",
     LIBRARY_GROUP_ID: "Свободные коллажи",
+    EXAMPLES_GROUP_ID: "Примеры с рынка",
 }
 
 
@@ -151,6 +173,11 @@ def is_transfer_allowed(source_group_id: UUID | None, target_group_id: UUID) -> 
     src = GROUP_SETTINGS.get(source_group_id)
     if src is None or src.studio_role == "none":
         return False  # unknown group, or one Studio doesn't read from
+
+    # Рыночные примеры: только smart_part-цели. Чужое фото не должно попасть в
+    # instance-канал («На публикацию») как фото конкретного нашего экземпляра.
+    if src.smart_only_source and tgt.owner_kind != "smart_part":
+        return False
 
     # 'any' target (smart_part channels) accepts any known source. Otherwise the
     # source's condition_filter must match the target's exactly — a personal

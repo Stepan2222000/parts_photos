@@ -733,6 +733,7 @@ async def _do_transfer(
                 sp_row = await conn.fetchrow(
                     """
                     SELECT j.suggested_collages_json,
+                           sc.id         AS src_collage_id,
                            sc.owner_kind AS src_owner_kind,
                            sc.owner_id   AS src_owner_id
                     FROM studio_jobs j
@@ -860,6 +861,14 @@ async def _resolve_smart_for_smart_target(conn, sp_row) -> str | None:
         )
         if item:
             return item["smart_part_id"]
+    if sp_row["src_owner_kind"] is None and sp_row["src_collage_id"] is not None:
+        # «Примеры с рынка»: owner-less collage, binding in smart_part_examples.
+        linked = await conn.fetchval(
+            "SELECT smart_part_id FROM smart_part_examples WHERE collage_id = $1",
+            sp_row["src_collage_id"],
+        )
+        if linked:
+            return linked
     sug = sp_row["suggested_collages_json"]
     if isinstance(sug, str):
         sug = json.loads(sug)

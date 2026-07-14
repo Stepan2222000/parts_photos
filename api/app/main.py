@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import video
 from .config import settings
 from .db import close_pool, init_pool
-from .routers import collages, gaps, groups, owners, photos, studio
+from .routers import collages, examples, gaps, groups, owners, photos, studio
 from .studio.storage import ensure_bucket as ensure_studio_bucket
 
 
@@ -41,6 +41,7 @@ app.include_router(photos.router)
 app.include_router(owners.router)
 app.include_router(studio.router)
 app.include_router(gaps.router)
+app.include_router(examples.router)
 
 
 @app.get("/health")

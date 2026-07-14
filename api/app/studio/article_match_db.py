@@ -100,6 +100,15 @@ async def _resolve_smart_part_from_source(
         if item is None:
             return None
         smart_id = item["smart_part_id"]
+    elif row["owner_kind"] is None:
+        # Owner-less collage: «Примеры с рынка» keeps its smart binding in
+        # smart_part_examples. Unbound library collages have no row there.
+        smart_id = await conn.fetchval(
+            "SELECT smart_part_id FROM smart_part_examples WHERE collage_id = $1",
+            source_collage_id,
+        )
+        if smart_id is None:
+            return None
     else:
         return None
     part = await conn.fetchrow(_PART_BY_ID, smart_id)
