@@ -76,18 +76,28 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
     steps:
       - name: SSH deploy on server
         uses: appleboy/ssh-action@v1
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: GHCR_TOKEN,GHCR_USER
           script: |
             set -euo pipefail
             cd /root/parts_photos_app
             git fetch --quiet origin main
             git reset --hard origin/main
+            # Fresh registry login every deploy — the manually stored token on
+            # the server was a 1h ghs_ that expired and broke pulls.
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             docker compose pull
             # Apply DB migrations on every deploy (idempotent — uses
             # CREATE … IF NOT EXISTS / ADD COLUMN IF NOT EXISTS).
