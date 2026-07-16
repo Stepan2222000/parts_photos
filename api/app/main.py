@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import video
 from .config import settings
 from .db import close_pool, init_pool
-from .routers import arrivals, collages, gaps, groups, owners, photos, studio
+from .routers import arrivals, collages, gaps, groups, owners, photos, studio, watermark
 from .studio.storage import ensure_bucket as ensure_studio_bucket
 
 
@@ -29,7 +29,8 @@ app = FastAPI(title="photos_api", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.web_origin],
+    # WEB_ORIGIN supports a comma-separated list (e.g. dev 3000 + prod 3100).
+    allow_origins=[o.strip() for o in settings.web_origin.split(",") if o.strip()],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -42,6 +43,7 @@ app.include_router(owners.router)
 app.include_router(studio.router)
 app.include_router(gaps.router)
 app.include_router(arrivals.router)
+app.include_router(watermark.router)
 
 
 @app.get("/health")

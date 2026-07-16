@@ -15,6 +15,9 @@ services:
       MINIO_SECURE: "false"
       WEB_ORIGIN: https://parts-photos.parts-everything.site
       API_PORT: "8001"
+      # Browser-reachable base of this API — watermark-proxy photo URLs
+      # (GET /photos/{id}/wm) are built from it.
+      API_PUBLIC_BASE: https://parts-photos.parts-everything.site/api
       STUDIO_MINIO_BUCKET: parts-photos-studio
       STUDIO_MINIO_PUBLIC_BASE: https://s3.parts-everything.site/parts-photos-studio
     networks:

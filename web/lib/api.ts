@@ -20,6 +20,8 @@ import type {
   StudioOptions,
   TargetGroup,
   TransferRules,
+  WatermarkConfig,
+  WatermarkGroupState,
 } from "./types";
 
 const BASE =
@@ -185,6 +187,23 @@ export const api = {
 
     getJob: (id: string) => req<StudioJob>(`/studio/jobs/${id}`),
 
+    refineJob: async (
+      jobId: string,
+      prompt: string,
+      file?: File | null,
+    ): Promise<StudioJob> => {
+      const fd = new FormData();
+      fd.append("prompt", prompt);
+      if (file) fd.append("file", file);
+      const r = await fetch(`${BASE}/studio/jobs/${jobId}/refine`, {
+        method: "POST",
+        body: fd,
+        cache: "no-store",
+      });
+      if (!r.ok) throw new ApiError(r.status, `/studio/jobs/${jobId}/refine`, await r.text());
+      return r.json();
+    },
+
     targetGroups: () => req<TargetGroup[]>("/studio/target-groups"),
 
     transferRules: () => req<TransferRules>("/studio/transfer-rules"),
@@ -218,7 +237,6 @@ export const api = {
       name?: string;
       customPrompt?: string;
       backgroundId?: string;
-      watermarkId?: string;
       sourcePhotoIds?: string[];
       files?: File[];
     }): Promise<StudioBatch> => {
@@ -227,7 +245,6 @@ export const api = {
       if (input.name) fd.append("name", input.name);
       if (input.customPrompt) fd.append("custom_prompt", input.customPrompt);
       if (input.backgroundId) fd.append("background_id", input.backgroundId);
-      if (input.watermarkId) fd.append("watermark_id", input.watermarkId);
       if (input.sourcePhotoIds && input.sourcePhotoIds.length) {
         fd.append("source_photo_ids", input.sourcePhotoIds.join(","));
       }
@@ -241,6 +258,19 @@ export const api = {
       if (!r.ok) throw new ApiError(r.status, "/studio/batches", await r.text());
       return r.json();
     },
+  },
+  watermark: {
+    getConfig: () => req<WatermarkConfig>("/watermark/config"),
+    setAsset: (watermarkId: string | null) =>
+      req<WatermarkConfig>("/watermark/config", {
+        method: "PUT",
+        body: JSON.stringify({ watermark_id: watermarkId }),
+      }),
+    toggleGroup: (groupId: string, enabled: boolean) =>
+      req<WatermarkGroupState>(`/watermark/groups/${groupId}`, {
+        method: "PUT",
+        body: JSON.stringify({ enabled }),
+      }),
   },
 };
 

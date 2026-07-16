@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 import asyncpg
 from fastapi import APIRouter, HTTPException, Query
 
+from .. import watermark as wm
 from ..db import pool
 from ..minio_client import public_url
 from ..models import (
@@ -132,24 +133,27 @@ async def _query_collages(
         SELECT
             c.id, c.group_id, c.owner_kind, c.owner_id, c.title, c.created_at,
             g.name          AS group_name,
+            g.watermark_enabled AS wm_enabled,
             p_meta.name     AS owner_name,
             p_meta.articles AS owner_articles,
             COUNT(ph.id) FILTER (WHERE ph.state = 'uploaded') AS photos_count,
-            first_photo.s3_key AS first_key
+            first_photo.s3_key AS first_key,
+            first_photo.id     AS first_photo_id
         FROM photo_collages c
         JOIN photo_groups g ON g.id = c.group_id
         LEFT JOIN photos ph ON ph.collage_id = c.id
         LEFT JOIN smart_ext.parts p_meta
                ON c.owner_kind = 'smart_part' AND p_meta.id = c.owner_id
         LEFT JOIN LATERAL (
-            SELECT s3_key FROM photos
+            SELECT id, s3_key FROM photos
             WHERE collage_id = c.id AND state = 'uploaded'
               AND mime NOT LIKE 'video/%'
             ORDER BY position ASC
             LIMIT 1
         ) first_photo ON true
         {where_sql}
-        GROUP BY c.id, g.name, p_meta.name, p_meta.articles, first_photo.s3_key
+        GROUP BY c.id, g.name, g.watermark_enabled, p_meta.name, p_meta.articles,
+                 first_photo.s3_key, first_photo.id
         {having}
         -- c.title/c.owner_kind/c.owner_id are functionally dependent on c.id (PK),
         -- so they need no explicit GROUP BY entry.
@@ -157,6 +161,7 @@ async def _query_collages(
         LIMIT ${len(params)}
     """
     rows = await pool().fetch(sql, *params)
+    wm_on = await wm.wm_active()
 
     collages = [
         Collage(
@@ -167,7 +172,10 @@ async def _query_collages(
             title=r["title"],
             created_at=r["created_at"],
             photos_count=r["photos_count"],
-            first_photo_url=public_url(r["first_key"]) if r["first_key"] else None,
+            first_photo_url=wm.photo_url(
+                r["first_photo_id"], r["first_key"], None,
+                wm_enabled=wm_on and r["wm_enabled"],
+            ) if r["first_key"] else None,
             owner_name=r["owner_name"],
             owner_articles=list(r["owner_articles"] or []),
             group_name=r["group_name"],
@@ -262,6 +270,7 @@ async def get_collage(collage_id: UUID) -> CollageDetail:
         SELECT
             c.id, c.group_id, c.owner_kind, c.owner_id, c.title,
             g.name AS group_name,
+            g.watermark_enabled AS wm_enabled,
             p_meta.name     AS owner_name,
             p_meta.articles AS owner_articles
         FROM photo_collages c
@@ -274,6 +283,7 @@ async def get_collage(collage_id: UUID) -> CollageDetail:
     )
     if head is None:
         raise HTTPException(404, "Collage not found")
+    wm_enabled = head["wm_enabled"] and await wm.wm_active()
 
     photo_rows = await pool().fetch(
         """
@@ -289,7 +299,10 @@ async def get_collage(collage_id: UUID) -> CollageDetail:
     )
 
     photos = [
-        Photo(**dict(r), url=public_url(r["s3_key"])) for r in photo_rows
+        Photo(**dict(r), url=wm.photo_url(
+            r["id"], r["s3_key"], r["mime"], wm_enabled=wm_enabled,
+        ))
+        for r in photo_rows
     ]
     detail = CollageDetail(
         id=head["id"],
@@ -387,6 +400,13 @@ async def _place_photos(
     tgt_cfg = gconfig.get(target_group_id)
     if tgt_cfg is None or tgt_cfg.studio_role != "target":
         raise HTTPException(422, "target group is not a publication target")
+
+    tgt_wm_enabled = bool(
+        await conn.fetchval(
+            "SELECT watermark_enabled FROM photo_groups WHERE id = $1",
+            target_group_id,
+        )
+    ) and await wm.wm_active()
 
     photo_ids = list(dict.fromkeys(photo_ids))
 
@@ -517,7 +537,9 @@ async def _place_photos(
                 r["size_bytes"], old_key,
             )
         next_pos += 1
-        placed.append(Photo(**dict(row), url=public_url(row["s3_key"])))
+        placed.append(Photo(**dict(row), url=wm.photo_url(
+            row["id"], row["s3_key"], row["mime"], wm_enabled=tgt_wm_enabled,
+        )))
 
     return placed, old_keys
 

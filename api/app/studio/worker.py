@@ -22,7 +22,7 @@ import asyncpg
 from openai import AsyncOpenAI, RateLimitError
 from PIL import Image
 
-from studio_core import build_prompt, run_codex, size_for
+from studio_core import build_prompt, build_refine_prompt, run_codex, size_for
 from studio_core.codex_runner import CodexError
 from studio_core.options import OptionKey
 
@@ -109,6 +109,7 @@ async def claim_one(conn: asyncpg.Connection) -> dict | None:
             """
             SELECT j.id, j.batch_id, j.source_kind, j.source_filename,
                    j.source_s3_key, j.source_photo_id,
+                   j.parent_job_id, j.refine_prompt, j.refine_ref_s3_key,
                    b.options_json, b.custom_prompt, b.background_id,
                    b.watermark_id
             FROM studio_jobs j
@@ -215,8 +216,20 @@ async def run_one_job(
     background_id = job["background_id"]
     watermark_id = job["watermark_id"]
 
-    has_bg = bool(options.get(OptionKey.REPLACE_BG.value)) and background_id is not None
-    has_wm = bool(options.get(OptionKey.ADD_WATERMARK.value)) and watermark_id is not None
+    # Refine jobs run a targeted follow-up edit of the parent's result: batch
+    # options/bg/wm were already applied on the first pass and must not rerun.
+    is_refine = job.get("parent_job_id") is not None
+
+    has_bg = (
+        not is_refine
+        and bool(options.get(OptionKey.REPLACE_BG.value))
+        and background_id is not None
+    )
+    has_wm = (
+        not is_refine
+        and bool(options.get(OptionKey.ADD_WATERMARK.value))
+        and watermark_id is not None
+    )
 
     job_dir = work_dir / str(job_id)
     job_dir.mkdir(parents=True, exist_ok=True)
@@ -240,25 +253,36 @@ async def run_one_job(
         downloads = [
             asyncio.to_thread(fetch_to, job["source_s3_key"], src_path, bucket=src_bucket),
         ]
-        bg_path = wm_path = None
+        bg_path = wm_path = ref_path = None
         if has_bg:
             bg_path = job_dir / f"background{Path(bg_key).suffix}"
             downloads.append(asyncio.to_thread(fetch_to, bg_key, bg_path))
         if has_wm:
             wm_path = job_dir / f"watermark{Path(wm_key).suffix}"
             downloads.append(asyncio.to_thread(fetch_to, wm_key, wm_path))
+        if is_refine and job["refine_ref_s3_key"]:
+            ref_path = job_dir / f"reference{Path(job['refine_ref_s3_key']).suffix}"
+            downloads.append(
+                asyncio.to_thread(fetch_to, job["refine_ref_s3_key"], ref_path)
+            )
         await asyncio.gather(*downloads)
 
         refs: list[Path] = [src_path]
         if bg_path: refs.append(bg_path)
         if wm_path: refs.append(wm_path)
+        if ref_path: refs.append(ref_path)
 
-        prompt = build_prompt(
-            options,
-            has_background=has_bg,
-            has_watermark=has_wm,
-            custom_prompt=job["custom_prompt"],
-        )
+        if is_refine:
+            prompt = build_refine_prompt(
+                job["refine_prompt"], has_reference=ref_path is not None
+            )
+        else:
+            prompt = build_prompt(
+                options,
+                has_background=has_bg,
+                has_watermark=has_wm,
+                custom_prompt=job["custom_prompt"],
+            )
 
         # Output size follows the source orientation (square/portrait/landscape).
         with Image.open(src_path) as src_img:
@@ -280,11 +304,12 @@ async def run_one_job(
         await asyncio.to_thread(put_bytes, result_key, result_bytes, "image/png")
 
         suggestions: dict | None = None
-        # Resolve source collage if this job came from a collage_photo source —
-        # the smart_part is inherited from the source collage's owner instead
-        # of guessed from the filename.
+        # Resolve source collage when the job traces back to a collage photo
+        # (directly, or inherited through a refine chain) — the smart_part is
+        # taken from the source collage's owner instead of guessed from the
+        # filename.
         source_collage_id = None
-        if job["source_kind"] == "collage_photo" and job["source_photo_id"]:
+        if job["source_photo_id"]:
             async with pool().acquire() as conn:
                 source_collage_id = await conn.fetchval(
                     "SELECT collage_id FROM photos WHERE id = $1",

@@ -8,6 +8,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 
 from studio_core.options import OptionKey, coerce_options
 
+from .. import watermark as wmod
 from ..config import settings
 from ..db import pool
 from ..images import InvalidImage, _open_pil_from_bytes, ensure_codex_compatible
@@ -152,16 +153,24 @@ async def _refresh_suggestions(jobs: list[StudioJob], conn) -> None:
 def _row_to_job(
     r: dict,
     transferred_photo_s3_key: str | None = None,
+    *,
+    wm_on: bool = False,
 ) -> StudioJob:
     suggestions = _parse_suggestions(r["suggested_collages_json"])
 
+    # 'refine' sources live in the studio bucket (parent's result image).
     if r["source_kind"] == "collage_photo":
         src_url = public_url(r["source_s3_key"])
     else:
         src_url = studio_url(r["source_s3_key"])
 
     if r["transferred_to_photo_id"] and transferred_photo_s3_key:
-        result_url = public_url(transferred_photo_s3_key)
+        # Transferred results live in publication collages — respect that
+        # channel's watermark flag, same as the collage page does.
+        result_url = wmod.photo_url(
+            r["transferred_to_photo_id"], transferred_photo_s3_key, None,
+            wm_enabled=wm_on and bool(r.get("transferred_wm_enabled")),
+        )
     elif r["result_s3_key"]:
         result_url = studio_url(r["result_s3_key"])
     else:
@@ -173,6 +182,8 @@ def _row_to_job(
         source_s3_key=r["source_s3_key"], source_url=src_url,
         source_photo_id=r["source_photo_id"],
         source_group_id=r.get("source_group_id"),
+        parent_job_id=r.get("parent_job_id"),
+        refine_prompt=r.get("refine_prompt"),
         status=r["status"],
         result_s3_key=r["result_s3_key"], result_url=result_url,
         log_tail=r.get("log_tail"), error=r["error"],
@@ -462,18 +473,21 @@ async def list_batches(limit: int = 50, offset: int = 0) -> list[StudioBatch]:
 # transferred_to_group_id (the group it landed in after transfer).
 _JOB_SELECT = """
 SELECT j.id, j.batch_id, j.source_kind, j.source_filename, j.source_s3_key,
-       j.source_photo_id, j.status, j.result_s3_key, j.error,
+       j.source_photo_id, j.parent_job_id, j.refine_prompt,
+       j.status, j.result_s3_key, j.error,
        j.tokens_used, j.elapsed_seconds, j.started_at, j.finished_at,
        j.transferred_to_photo_id, j.suggested_collages_json, j.created_at,
        sp.collage_id AS source_collage_id,
        sc.group_id AS source_group_id,
        tp.s3_key AS transferred_photo_s3_key,
-       tc.group_id AS transferred_to_group_id
+       tc.group_id AS transferred_to_group_id,
+       tg.watermark_enabled AS transferred_wm_enabled
 FROM studio_jobs j
 LEFT JOIN photos sp ON sp.id = j.source_photo_id
 LEFT JOIN photo_collages sc ON sc.id = sp.collage_id
 LEFT JOIN photos tp ON tp.id = j.transferred_to_photo_id
 LEFT JOIN photo_collages tc ON tc.id = tp.collage_id
+LEFT JOIN photo_groups tg ON tg.id = tc.group_id
 """
 
 
@@ -495,12 +509,13 @@ async def get_batch(batch_id: UUID) -> StudioBatchDetail:
             batch_id,
         )
         base = _row_to_batch(dict(head))
+        wm_on = await wmod.wm_active()
         jobs: list[StudioJob] = []
         for r in job_rows:
             d = dict(r)
             transferred_key = d.pop("transferred_photo_s3_key", None)
             d.pop("source_collage_id", None)
-            jobs.append(_row_to_job(d, transferred_key))
+            jobs.append(_row_to_job(d, transferred_key, wm_on=wm_on))
         await _refresh_suggestions(jobs, conn)
         return StudioBatchDetail(**base.model_dump(), jobs=jobs)
 
@@ -536,9 +551,89 @@ async def get_job(job_id: UUID) -> StudioJob:
         d = dict(row)
         transferred_key = d.pop("transferred_photo_s3_key", None)
         d.pop("source_collage_id", None)
-        job = _row_to_job(d, transferred_key)
+        job = _row_to_job(d, transferred_key, wm_on=await wmod.wm_active())
         await _refresh_suggestions([job], conn)
         return job
+
+
+@router.post("/jobs/{job_id}/refine", response_model=StudioJob, status_code=201)
+async def refine_job(
+    job_id: UUID,
+    prompt: Annotated[str, Form()],
+    file: Annotated[UploadFile | None, File()] = None,
+) -> StudioJob:
+    """Queue a follow-up edit of an already generated result.
+
+    The new job is a child of `job_id` in the same batch: its source is the
+    parent's result image in the studio bucket, plus an optional user
+    reference image. Refine is Studio-only — a transferred parent is rejected
+    (its result object has already been moved to the photos bucket).
+    """
+    text = prompt.strip()
+    if not text:
+        raise HTTPException(400, "Refine prompt must not be empty")
+
+    ref_payload: tuple[bytes, str, str] | None = None
+    if file is not None and file.filename:
+        raw = await file.read()
+        if not raw:
+            raise HTTPException(400, f"Empty file: {file.filename}")
+        if len(raw) > settings.studio_max_source_bytes:
+            raise HTTPException(
+                400,
+                f"{file.filename}: {len(raw)} bytes exceeds max "
+                f"{settings.studio_max_source_bytes} (gpt-image-2 limit)",
+            )
+        data, mime, ext, _w, _h = _decode_for_codex(
+            raw, file.content_type or "", file.filename, prefer_png=False
+        )
+        ref_payload = (data, mime, ext)
+
+    async with pool().acquire() as conn:
+        async with conn.transaction():
+            parent = await conn.fetchrow(
+                """
+                SELECT id, batch_id, status, result_s3_key,
+                       transferred_to_photo_id, source_filename, source_photo_id
+                FROM studio_jobs WHERE id = $1
+                """,
+                job_id,
+            )
+            if parent is None:
+                raise HTTPException(404, "Job not found")
+            if parent["transferred_to_photo_id"] is not None:
+                raise HTTPException(
+                    409, "Job already transferred — refine it from the collage photo"
+                )
+            if parent["status"] != "succeeded":
+                raise HTTPException(400, f"Job not succeeded ({parent['status']})")
+            if parent["result_s3_key"] is None:
+                raise HTTPException(400, "Job has no result image")
+
+            new_id = uuid4()
+            ref_key: str | None = None
+            if ref_payload is not None:
+                data, mime, ext = ref_payload
+                ref_key = f"uploads/{parent['batch_id']}/{new_id}-ref.{ext}"
+                put_bytes(ref_key, data, mime)
+
+            await conn.execute(
+                """
+                INSERT INTO studio_jobs
+                  (id, batch_id, source_kind, source_filename, source_s3_key,
+                   source_photo_id, parent_job_id, refine_prompt, refine_ref_s3_key)
+                VALUES ($1, $2, 'refine', $3, $4, $5, $6, $7, $8)
+                """,
+                new_id, parent["batch_id"], parent["source_filename"],
+                parent["result_s3_key"], parent["source_photo_id"],
+                parent["id"], text, ref_key,
+            )
+
+        row = await conn.fetchrow(_JOB_SELECT + "WHERE j.id = $1", new_id)
+        d = dict(row)
+        d.pop("transferred_photo_s3_key", None)
+        d.pop("source_collage_id", None)
+        return _row_to_job(d)
 
 
 # ---------------------------------------------------------------------------
@@ -835,7 +930,15 @@ async def _do_transfer(
                     ctx["source_photo_id"],
                 )
     photo_dict = dict(row)
-    photo_dict["url"] = public_url(photo_dict["s3_key"])
+    tgt_wm_enabled = bool(
+        await pool().fetchval(
+            "SELECT watermark_enabled FROM photo_groups WHERE id = $1", group_id
+        )
+    ) and await wmod.wm_active()
+    photo_dict["url"] = wmod.photo_url(
+        photo_dict["id"], photo_dict["s3_key"], photo_dict["mime"],
+        wm_enabled=tgt_wm_enabled,
+    )
     return Photo(**photo_dict)
 
 
