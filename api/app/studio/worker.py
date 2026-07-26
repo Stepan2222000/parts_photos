@@ -22,12 +22,13 @@ import asyncpg
 from openai import AsyncOpenAI, RateLimitError
 from PIL import Image
 
-from studio_core import build_prompt, run_codex, size_for
+from studio_core import build_prompt, build_refine_prompt, run_codex, size_for
 from studio_core.codex_runner import CodexError
 from studio_core.options import OptionKey
 
 from ..config import settings
 from ..db import close_pool, init_pool, pool
+from . import bg_worker
 from .article_match_db import find_matches
 from .storage import fetch_to, put_bytes, studio_bucket
 
@@ -109,6 +110,7 @@ async def claim_one(conn: asyncpg.Connection) -> dict | None:
             """
             SELECT j.id, j.batch_id, j.source_kind, j.source_filename,
                    j.source_s3_key, j.source_photo_id,
+                   j.parent_job_id, j.refine_prompt, j.refine_ref_s3_key,
                    b.options_json, b.custom_prompt, b.background_id,
                    b.watermark_id
             FROM studio_jobs j
@@ -215,8 +217,20 @@ async def run_one_job(
     background_id = job["background_id"]
     watermark_id = job["watermark_id"]
 
-    has_bg = bool(options.get(OptionKey.REPLACE_BG.value)) and background_id is not None
-    has_wm = bool(options.get(OptionKey.ADD_WATERMARK.value)) and watermark_id is not None
+    # Refine jobs run a targeted follow-up edit of the parent's result: batch
+    # options/bg/wm were already applied on the first pass and must not rerun.
+    is_refine = job.get("parent_job_id") is not None
+
+    has_bg = (
+        not is_refine
+        and bool(options.get(OptionKey.REPLACE_BG.value))
+        and background_id is not None
+    )
+    has_wm = (
+        not is_refine
+        and bool(options.get(OptionKey.ADD_WATERMARK.value))
+        and watermark_id is not None
+    )
 
     job_dir = work_dir / str(job_id)
     job_dir.mkdir(parents=True, exist_ok=True)
@@ -240,25 +254,36 @@ async def run_one_job(
         downloads = [
             asyncio.to_thread(fetch_to, job["source_s3_key"], src_path, bucket=src_bucket),
         ]
-        bg_path = wm_path = None
+        bg_path = wm_path = ref_path = None
         if has_bg:
             bg_path = job_dir / f"background{Path(bg_key).suffix}"
             downloads.append(asyncio.to_thread(fetch_to, bg_key, bg_path))
         if has_wm:
             wm_path = job_dir / f"watermark{Path(wm_key).suffix}"
             downloads.append(asyncio.to_thread(fetch_to, wm_key, wm_path))
+        if is_refine and job["refine_ref_s3_key"]:
+            ref_path = job_dir / f"reference{Path(job['refine_ref_s3_key']).suffix}"
+            downloads.append(
+                asyncio.to_thread(fetch_to, job["refine_ref_s3_key"], ref_path)
+            )
         await asyncio.gather(*downloads)
 
         refs: list[Path] = [src_path]
         if bg_path: refs.append(bg_path)
         if wm_path: refs.append(wm_path)
+        if ref_path: refs.append(ref_path)
 
-        prompt = build_prompt(
-            options,
-            has_background=has_bg,
-            has_watermark=has_wm,
-            custom_prompt=job["custom_prompt"],
-        )
+        if is_refine:
+            prompt = build_refine_prompt(
+                job["refine_prompt"], has_reference=ref_path is not None
+            )
+        else:
+            prompt = build_prompt(
+                options,
+                has_background=has_bg,
+                has_watermark=has_wm,
+                custom_prompt=job["custom_prompt"],
+            )
 
         # Output size follows the source orientation (square/portrait/landscape).
         with Image.open(src_path) as src_img:
@@ -280,11 +305,12 @@ async def run_one_job(
         await asyncio.to_thread(put_bytes, result_key, result_bytes, "image/png")
 
         suggestions: dict | None = None
-        # Resolve source collage if this job came from a collage_photo source —
-        # the smart_part is inherited from the source collage's owner instead
-        # of guessed from the filename.
+        # Resolve source collage when the job traces back to a collage photo
+        # (directly, or inherited through a refine chain) — the smart_part is
+        # taken from the source collage's owner instead of guessed from the
+        # filename.
         source_collage_id = None
-        if job["source_kind"] == "collage_photo" and job["source_photo_id"]:
+        if job["source_photo_id"]:
             async with pool().acquire() as conn:
                 source_collage_id = await conn.fetchval(
                     "SELECT collage_id FROM photos WHERE id = $1",
@@ -362,21 +388,63 @@ async def main_loop() -> None:
             pass
 
     in_flight: set[asyncio.Task] = set()
+    bg_active = [0]  # background-version lane occupancy (list = mutable closure)
+    claim_failures = 0
+
+    await bg_worker.recover_stuck()
 
     try:
         while not stop.is_set():
-            # Try to launch as many jobs as the adaptive pool allows
+            # Try to launch as many jobs as the adaptive pool allows.
+            # A dropped DB connection during a claim must not kill the loop —
+            # skip the tick and retry after the poll interval.
             launched_any = False
-            while ad_pool.active < ad_pool.target and not stop.is_set():
-                async with pool().acquire() as conn:
-                    job = await claim_one(conn)
-                if job is None:
-                    break
-                await ad_pool.acquire()
-                t = asyncio.create_task(_wrap_job(job, work_root, ad_pool, client))
-                in_flight.add(t)
-                t.add_done_callback(in_flight.discard)
-                launched_any = True
+            try:
+                while ad_pool.active < ad_pool.target and not stop.is_set():
+                    # acquire timeout: a wedged pool must raise, not hang the
+                    # loop forever (seen with a flaky uplink to the DB).
+                    async with pool().acquire(timeout=30) as conn:
+                        job = await claim_one(conn)
+                    if job is None:
+                        break
+                    await ad_pool.acquire()
+                    t = asyncio.create_task(_wrap_job(job, work_root, ad_pool, client))
+                    in_flight.add(t)
+                    t.add_done_callback(in_flight.discard)
+                    launched_any = True
+
+                # Background-version lane: batch work yields to interactive
+                # studio jobs (same single-account gateway) — it only runs when
+                # the studio queue is idle, and never above its own low cap.
+                while (
+                    ad_pool.active == 0
+                    and bg_active[0] < bg_worker.MAX_CONCURRENCY
+                    and not stop.is_set()
+                ):
+                    async with pool().acquire(timeout=30) as conn:
+                        bg_job = await bg_worker.claim_one(conn)
+                    if bg_job is None:
+                        break
+                    bg_active[0] += 1
+                    t = asyncio.create_task(
+                        _wrap_bg_job(bg_job, work_root, client, bg_active)
+                    )
+                    in_flight.add(t)
+                    t.add_done_callback(in_flight.discard)
+                    launched_any = True
+                claim_failures = 0
+            except Exception:
+                claim_failures += 1
+                logger.exception(
+                    "claim tick failed (%d in a row), retrying", claim_failures
+                )
+                launched_any = False
+                # A poisoned pool never recovers in-process — die and let the
+                # supervisor (restart loop / docker restart policy) start us
+                # fresh with a clean pool.
+                if claim_failures >= 10:
+                    logger.error("claim failures piled up — exiting for a clean restart")
+                    raise
 
             if not launched_any:
                 try:
@@ -386,7 +454,8 @@ async def main_loop() -> None:
 
         if in_flight:
             logger.info("waiting for %d in-flight jobs to finish...", len(in_flight))
-            await asyncio.gather(*in_flight, return_exceptions=True)
+            # Bounded: a job hung on a dead socket must not wedge shutdown.
+            await asyncio.wait(in_flight, timeout=120)
     finally:
         await client.close()
         await close_pool()
@@ -394,13 +463,44 @@ async def main_loop() -> None:
         logger.info("studio worker stopped")
 
 
+# Hard per-task ceiling: the image call has its own timeout, but a socket that
+# dies mid-request can hang past it and pin a concurrency slot forever (seen
+# 2026-07-26: two zombie tasks froze the bg lane for 9 hours). The ceiling
+# cancels the task and returns the job to its queue.
+def _task_ceiling() -> float:
+    return settings.studio_image_timeout_seconds + 300
+
+
 async def _wrap_job(
     job: dict, work_root: Path, ad_pool: AdaptivePool, client: AsyncOpenAI
 ) -> None:
     try:
-        await run_one_job(job, work_root, ad_pool, client)
+        try:
+            await asyncio.wait_for(
+                run_one_job(job, work_root, ad_pool, client), timeout=_task_ceiling()
+            )
+        except asyncio.TimeoutError:
+            logger.error("studio job %s hit the hard ceiling — failing it", job["id"])
+            await fail_job(job["id"], "hard timeout: task hung and was cancelled")
     finally:
         await ad_pool.release()
+
+
+async def _wrap_bg_job(
+    job: dict, work_root: Path, client: AsyncOpenAI, bg_active: list[int]
+) -> None:
+    try:
+        try:
+            await asyncio.wait_for(
+                bg_worker.run_one(job, work_root, client), timeout=_task_ceiling()
+            )
+        except asyncio.TimeoutError:
+            logger.error("bg job %s hit the hard ceiling — rescheduling", job["id"])
+            await bg_worker._reschedule(
+                job["id"], job["attempts"], "hard timeout: task hung and was cancelled"
+            )
+    finally:
+        bg_active[0] -= 1
 
 
 def run() -> None:

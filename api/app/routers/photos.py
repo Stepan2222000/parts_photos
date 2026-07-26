@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, HTTPException, UploadFile
 
 from .. import video
+from .. import watermark as wm
 from ..config import settings
 from ..db import pool
 from ..images import InvalidImage, to_jpeg
@@ -91,7 +92,12 @@ async def _upload_video(collage_id: UUID, group_id: UUID, file: UploadFile) -> P
 @router.post("/collages/{collage_id}/photos", response_model=Photo, status_code=201)
 async def upload_photo(collage_id: UUID, file: UploadFile) -> Photo:
     head = await pool().fetchrow(
-        "SELECT group_id FROM photo_collages WHERE id = $1", collage_id
+        """
+        SELECT c.group_id, g.watermark_enabled
+        FROM photo_collages c JOIN photo_groups g ON g.id = c.group_id
+        WHERE c.id = $1
+        """,
+        collage_id,
     )
     if head is None:
         raise HTTPException(404, "Collage not found")
@@ -164,7 +170,10 @@ async def upload_photo(collage_id: UUID, file: UploadFile) -> Photo:
         """,
         photo_id,
     )
-    return Photo(**dict(final), url=public_url(final["s3_key"]))
+    wm_enabled = head["watermark_enabled"] and await wm.wm_active()
+    return Photo(**dict(final), url=wm.photo_url(
+        final["id"], final["s3_key"], final["mime"], wm_enabled=wm_enabled,
+    ))
 
 
 @router.delete("/photos/{photo_id}", status_code=204)

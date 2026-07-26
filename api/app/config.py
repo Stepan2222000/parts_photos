@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     minio_secure: bool = False
     web_origin: str = "http://localhost:3000"
     api_port: int = 8001
+    # Public base URL of THIS API — used to build watermark-proxy photo URLs
+    # (GET /photos/{id}/wm). Empty = derived as http://localhost:{api_port}.
+    api_public_base: str = ""
 
     # Studio (image generation)
     studio_minio_bucket: str = "parts-photos-studio"
@@ -32,7 +35,7 @@ class Settings(BaseSettings):
     ffprobe_bin: str = "ffprobe"
 
     # Studio image-edit backend (OpenAI-compatible /images/edits endpoint)
-    studio_openai_base_url: str = "https://api.openai.com/v1"
+    studio_openai_base_url: str = "http://2.27.20.221:8317/v1"
     studio_openai_api_key: str = ""
     studio_image_model: str = "gpt-image-2"
     studio_image_quality: str = "auto"  # advisory; backend may not honor it

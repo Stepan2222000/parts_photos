@@ -49,11 +49,6 @@ const OPTIONS: { key: StudioOptionKey; label: string; hint: string }[] = [
     label: "Убрать чужие вотермарки",
     hint: "Логотипы магазинов, оверлеи приложений. Заводская печать остаётся",
   },
-  {
-    key: "add_watermark",
-    label: "Добавить мой вотермарк",
-    hint: "Картинка из библиотеки накладывается на результат",
-  },
 ];
 
 interface Props {

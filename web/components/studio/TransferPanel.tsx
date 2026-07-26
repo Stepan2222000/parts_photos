@@ -14,6 +14,10 @@ import s from "./TransferPanel.module.css";
 
 interface Props {
   batch: StudioBatchDetail;
+  /** Transferable jobs — one per refine chain: the version currently selected
+   *  in the preview. Chains that already transferred a version are excluded
+   *  upstream (BatchView). */
+  jobs: StudioJob[];
   onTransferred: () => Promise<void> | void;
 }
 
@@ -38,7 +42,7 @@ interface SuggestedItem {
   existing_collage_id: string | null;
 }
 
-export default function TransferPanel({ batch, onTransferred }: Props) {
+export default function TransferPanel({ batch, jobs, onTransferred }: Props) {
   const [groups, setGroups] = useState<TargetGroup[]>([]);
   const [rules, setRules] = useState<TransferRules | null>(null);
   const [active, setActive] = useState<string | null>(null);
@@ -50,8 +54,8 @@ export default function TransferPanel({ batch, onTransferred }: Props) {
 
   // Eligible jobs = succeeded, not yet transferred.
   const eligibleJobs = useMemo(
-    () => batch.jobs.filter((j) => j.status === "succeeded" && !j.transferred_to_photo_id),
-    [batch.jobs],
+    () => jobs.filter((j) => j.status === "succeeded" && !j.transferred_to_photo_id),
+    [jobs],
   );
 
   useEffect(() => {

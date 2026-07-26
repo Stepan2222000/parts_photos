@@ -134,6 +134,19 @@
   border-radius: var(--radius-pill);
 }
 
+.versions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+}
+
 .cardFoot {
   display: flex;
   align-items: center;
@@ -237,6 +250,159 @@
   font-weight: 500;
 }
 .transferredLink:hover { text-decoration: underline; }
+
+/* Version strip (refine chain) */
+.verStrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: var(--sp-md);
+}
+.verBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 6px 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-body);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+.verBtn:hover { border-color: var(--border-strong); }
+.verBtnActive {
+  border-color: var(--brand-coral);
+  background: var(--brand-coral-soft);
+  color: var(--text-strong);
+}
+.verDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+.vd_succeeded { background: var(--accent-teal); }
+.vd_running { background: var(--accent-amber); animation: pulse 1.2s infinite ease-in-out; }
+.vd_queued { background: var(--accent-amber); opacity: 0.5; }
+.vd_failed { background: var(--error-product); }
+
+.promptNote {
+  margin-top: var(--sp-md);
+  padding: 10px 14px;
+  background: var(--bg-input-strong);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: var(--text-body);
+}
+.promptNoteLabel {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* Refine form */
+.refineBox {
+  margin-top: var(--sp-lg);
+  padding: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.refineTitle {
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--text-strong);
+  margin-bottom: 4px;
+}
+.refineSub {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0 0 10px;
+}
+.refineTa {
+  width: 100%;
+  resize: vertical;
+  background: var(--bg-input-strong);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--text-strong);
+  font-family: inherit;
+}
+.refineTa:focus { outline: none; border-color: var(--brand-coral); }
+.refineRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+.attachBtn {
+  background: transparent;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-pill);
+  padding: 8px 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.attachBtn:hover { color: var(--text-strong); border-color: var(--text-muted); }
+.attachBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.attachChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-input-strong);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 4px 10px 4px 4px;
+  font-size: 12px;
+  color: var(--text-body);
+  max-width: 260px;
+}
+.attachThumb {
+  width: 28px;
+  height: 28px;
+  object-fit: cover;
+  border-radius: 50%;
+}
+.attachName {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.attachRemove {
+  background: transparent;
+  border: 0;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 2px;
+}
+.attachRemove:hover { color: var(--error-product); }
+.refineCta {
+  margin-left: auto;
+  background: var(--brand-coral);
+  color: #fff;
+  border: 0;
+  padding: 10px 22px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.refineCta:hover { background: var(--brand-coral-hover); }
+.refineCta:disabled { opacity: 0.5; cursor: not-allowed; }
+.refineHint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
 
 .compare {
   display: grid;

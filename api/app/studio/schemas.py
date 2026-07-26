@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 JobStatus = Literal["queued", "running", "succeeded", "failed"]
 BatchStatus = Literal["queued", "running", "done", "partial", "failed"]
-SourceKind = Literal["upload", "collage_photo"]
+SourceKind = Literal["upload", "collage_photo", "refine"]
 TargetKind = Literal["smart_part", "instance"]
 
 
@@ -55,6 +55,9 @@ class StudioJob(BaseModel):
     source_url: str
     source_photo_id: UUID | None
     source_group_id: UUID | None = None
+    # Refine chain: set on jobs created via POST /studio/jobs/{id}/refine.
+    parent_job_id: UUID | None = None
+    refine_prompt: str | None = None
     status: JobStatus
     result_s3_key: str | None
     result_url: str | None

@@ -1,4 +1,4 @@
-export type OwnerKind = "smart_part" | "instance";
+export type OwnerKind = "smart_part" | "instance" | "arrival";
 export type ConditionFilter = "personal" | "defect" | "not_defect" | "not_new" | "any";
 export type PhotoState = "pending" | "uploaded" | "failed" | "deleted";
 
@@ -120,6 +120,8 @@ export interface OwnerSearchResult {
 
 // ─── Studio ─────────────────────────────────────────────────────────────────
 
+// NOTE: the old AI option "add_watermark" is gone — the watermark is now a
+// mechanical on-view overlay configured on /watermark (see WatermarkConfig).
 export type StudioOptionKey =
   | "replace_bg"
   | "improve_lighting"
@@ -129,8 +131,7 @@ export type StudioOptionKey =
   | "redo_labels"
   | "substitute_date"
   | "remove_extras"
-  | "remove_others_watermark"
-  | "add_watermark";
+  | "remove_others_watermark";
 
 export type StudioOptions = Record<StudioOptionKey, boolean>;
 
@@ -194,12 +195,15 @@ export interface LookupSmart {
 export interface StudioJob {
   id: string;
   batch_id: string;
-  source_kind: "upload" | "collage_photo";
+  source_kind: "upload" | "collage_photo" | "refine";
   source_filename: string | null;
   source_s3_key: string;
   source_url: string;
   source_photo_id: string | null;
   source_group_id: string | null;
+  /** Refine chain: set on versions created via «Доработать». */
+  parent_job_id: string | null;
+  refine_prompt: string | null;
   status: StudioJobStatus;
   result_s3_key: string | null;
   result_url: string | null;
@@ -218,6 +222,7 @@ export interface StudioJob {
 export interface StudioBatch {
   id: string;
   name: string | null;
+  // Old batches may carry extra legacy keys (e.g. add_watermark) — harmless.
   options_json: StudioOptions;
   custom_prompt: string | null;
   background_id: string | null;
@@ -239,6 +244,64 @@ export interface LookupItem {
   condition: string;
   condition_note: string | null;
   existing_collage_id: string | null;
+}
+
+// ─── Watermark (on-view overlay) ────────────────────────────────────────────
+
+export interface WatermarkGroupState {
+  id: string;
+  name: string;
+  enabled: boolean;
+}
+
+export interface WatermarkConfig {
+  /** Active mark (from the studio_watermarks library), null = nothing applied. */
+  watermark: StudioAsset | null;
+  /** Publication channels with their per-channel toggle. */
+  groups: WatermarkGroupState[];
+}
+
+// ─── Catalog backgrounds ─────────────────────────────────────────────────
+
+export interface BackgroundCoverage {
+  asset: StudioAsset;
+  done: number;
+  /** pending + running */
+  pending: number;
+  failed: number;
+}
+
+export interface BackgroundsOverview {
+  active_id: string | null;
+  /** Photos in the background set (bg_set = true). */
+  set_total: number;
+  items: BackgroundCoverage[];
+}
+
+export interface BgGenerateResult {
+  enqueued: number;
+  rearmed_failed: number;
+  already_done: number;
+}
+
+export type BgVersionState = "running" | "failed" | "pending" | "missing" | "done";
+
+export interface BgPhotoState {
+  photo_id: string;
+  collage_id: string;
+  collage_title: string | null;
+  standing: boolean;
+  state: BgVersionState;
+  attempts: number;
+  error: string | null;
+  thumb_url: string;
+  version_url: string | null;
+}
+
+export interface BgPhotoFlags {
+  photo_id: string;
+  in_set: boolean;
+  standing: boolean;
 }
 
 // ─── Photo gaps ───────────────────────────────────────────────────────────

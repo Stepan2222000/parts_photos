@@ -2,8 +2,14 @@ from __future__ import annotations
 
 from datetime import date
 
+import pytest
+
 from studio_core.options import OptionKey, defaults
-from studio_core.prompt_builder import OPTION_KEYS_ORDER, build_prompt
+from studio_core.prompt_builder import (
+    OPTION_KEYS_ORDER,
+    build_prompt,
+    build_refine_prompt,
+)
 
 
 def test_defaults_match_option_keys() -> None:
@@ -137,6 +143,33 @@ def test_unknown_option_keys_dropped() -> None:
     opts = defaults() | {"some_unknown_key": True, "also_invalid": False}
     p = build_prompt(opts)  # не должно падать
     assert "Дополнительные подсказки по качеству" in p
+
+
+def test_refine_prompt_basic_structure() -> None:
+    p = build_refine_prompt("убери блик на подшипнике")
+    assert "Изображение 1: текущая версия фото товара" in p
+    assert "Измени ТОЛЬКО то, что явно просит пользователь" in p
+    assert "ЗАМЕЧАНИЯ ПОЛЬЗОВАТЕЛЯ" in p
+    assert "убери блик на подшипнике" in p
+    assert "Дополнительные подсказки по качеству" in p
+    # никакой матрицы опций основного пайплайна
+    assert "ЧТО НУЖНО СДЕЛАТЬ:" not in p
+    assert "ЧТО НЕЛЬЗЯ МЕНЯТЬ:" not in p
+
+
+def test_refine_prompt_reference_legend() -> None:
+    p = build_refine_prompt("сделай как на примере", has_reference=True)
+    assert "Изображение 2: референс от пользователя" in p
+    assert "НЕ вставляй содержимое референса в кадр буквально" in p
+
+    p2 = build_refine_prompt("поправь тень", has_reference=False)
+    assert "Изображение 2" not in p2
+
+
+def test_refine_prompt_requires_text() -> None:
+    for bad in ("", "   ", None):
+        with pytest.raises(ValueError):
+            build_refine_prompt(bad)  # type: ignore[arg-type]
 
 
 def test_aspect_ratio_set_externally() -> None:

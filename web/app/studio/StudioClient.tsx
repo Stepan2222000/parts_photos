@@ -31,7 +31,6 @@ const DEFAULT_OPTIONS: StudioOptions = {
   substitute_date: false,
   remove_extras: false,
   remove_others_watermark: true,
-  add_watermark: false,
 };
 
 interface Props {
@@ -100,9 +99,7 @@ export default function StudioClient({
   // so bulk batches are findable in history. null = let the user/back-end name it.
   const [defaultBatchName, setDefaultBatchName] = useState<string | null>(null);
   const [backgrounds, setBackgrounds] = useState<StudioAsset[]>([]);
-  const [watermarks, setWatermarks] = useState<StudioAsset[]>([]);
   const [bgId, setBgId] = useState<string | null>(null);
-  const [wmId, setWmId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -183,13 +180,11 @@ export default function StudioClient({
   }, []);
 
   const refreshAll = useCallback(async () => {
-    const [bs, ws, lst] = await Promise.all([
+    const [bs, lst] = await Promise.all([
       api.studio.listBackgrounds(),
-      api.studio.listWatermarks(),
       api.studio.listBatches(BATCH_PAGE),
     ]);
     setBackgrounds(bs);
-    setWatermarks(ws);
     setBatches(lst);
     setHasMoreBatches(lst.length === BATCH_PAGE);
     if (activeBatchId) {
@@ -217,7 +212,10 @@ export default function StudioClient({
   }, [loadingMore, hasMoreBatches, batches]);
 
   // ── Polling for active batch progress ─────────────────────────────────────
+  // pollNonce restarts the loop for a finished batch when a refine job is
+  // queued (batch status stays 'done' — only the job list has activity).
   const pollRef = useRef<number | null>(null);
+  const [pollNonce, setPollNonce] = useState(0);
   useEffect(() => {
     if (!activeBatchId) return;
     let mounted = true;
@@ -229,7 +227,10 @@ export default function StudioClient({
         setActiveBatch((prev) => sameDetail(prev, det) ? prev : det);
         // Sync the rail row in-place — avoids re-fetching all 50 batches per tick.
         setBatches((prev) => patchBatch(prev, det));
-        if (det.status === "queued" || det.status === "running") {
+        const jobsActive = det.jobs.some(
+          (j) => j.status === "queued" || j.status === "running",
+        );
+        if (det.status === "queued" || det.status === "running" || jobsActive) {
           pollRef.current = window.setTimeout(tick, 2000);
         }
       } catch (e) {
@@ -247,7 +248,7 @@ export default function StudioClient({
         pollRef.current = null;
       }
     };
-  }, [activeBatchId]);
+  }, [activeBatchId, pollNonce]);
 
   // ── Auto-pick first asset when toggle turns on ────────────────────────────
   useEffect(() => {
@@ -255,18 +256,12 @@ export default function StudioClient({
       setBgId(backgrounds[0].id);
     }
   }, [options.replace_bg, bgId, backgrounds]);
-  useEffect(() => {
-    if (options.add_watermark && wmId === null && watermarks.length > 0) {
-      setWmId(watermarks[0].id);
-    }
-  }, [options.add_watermark, wmId, watermarks]);
 
   // ── Submit ────────────────────────────────────────────────────────────────
   const sourceCount = files.length + collagePhotos.length;
   const missing: string[] = [];
   if (sourceCount === 0) missing.push("фото");
   if (options.replace_bg && bgId === null) missing.push("фон");
-  if (options.add_watermark && wmId === null) missing.push("вотермарк");
   const submittable = !submitting && missing.length === 0;
 
   async function handleSubmit() {
@@ -279,7 +274,6 @@ export default function StudioClient({
         name: defaultBatchName ?? undefined,
         customPrompt: customPrompt.trim() || undefined,
         backgroundId: bgId ?? undefined,
-        watermarkId: wmId ?? undefined,
         sourcePhotoIds: collagePhotos.map((p) => p.id),
         files,
       });
@@ -344,6 +338,7 @@ export default function StudioClient({
               }
               router.refresh();
             }}
+            onRefined={() => setPollNonce((n) => n + 1)}
           />
         ) : (
           <>
@@ -392,28 +387,6 @@ export default function StudioClient({
                   await api.studio.deleteBackground(id);
                   setBackgrounds((x) => x.filter((a) => a.id !== id));
                   if (bgId === id) setBgId(null);
-                }}
-              />
-            )}
-
-            {options.add_watermark && (
-              <AssetPicker
-                kind="watermark"
-                title="Watermark"
-                helper="Выбери свой вотермарк (PNG с альфой работает лучше всего)."
-                items={watermarks}
-                activeId={wmId}
-                onSelect={setWmId}
-                onUpload={async (file) => {
-                  const a = await api.studio.uploadWatermark(file);
-                  setWatermarks((x) => [a, ...x]);
-                  setWmId(a.id);
-                }}
-                onDelete={async (id) => {
-                  if (!confirm("Удалить вотермарк из библиотеки?")) return;
-                  await api.studio.deleteWatermark(id);
-                  setWatermarks((x) => x.filter((a) => a.id !== id));
-                  if (wmId === id) setWmId(null);
                 }}
               />
             )}

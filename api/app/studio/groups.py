@@ -18,7 +18,7 @@ from uuid import UUID
 from fastapi import HTTPException
 
 StudioRole = Literal["source", "target", "none"]
-OwnerKind = Literal["smart_part", "instance"]
+OwnerKind = Literal["smart_part", "instance", "arrival"]
 ConditionFilter = Literal["personal", "defect", "not_defect", "not_new", "any"]
 
 
@@ -64,6 +64,9 @@ LIBRARY_GROUP_ID = UUID("0a7fbbdf-e605-48f1-a320-ca2094a0f32c")
 # реальных фото с чужих объявлений для VL-моделей, привязка в smart_part_examples.
 EXAMPLES_GROUP_ID = UUID("024e74e8-bf6b-45be-bc78-18cf08cc27b9")
 
+# Поступления: коллаж на трек-номер (owner_kind='arrival', SPEC_INTAKE delivery).
+ARRIVALS_GROUP_ID = UUID("b66cc603-0bf2-4010-a602-a871f56d3e66")
+
 
 GROUP_SETTINGS: dict[UUID, GroupConfig] = {
     # Эталонные на публикацию — canonical smart_part references; also a Studio
@@ -78,9 +81,11 @@ GROUP_SETTINGS: dict[UUID, GroupConfig] = {
     # Avito 2-й аккаунт — smart_part-level target, no item condition check.
     UUID("fa0df9bb-f285-4eb2-ab46-cd24e520a4e1"):
         GroupConfig("target", "smart_part", "any"),
-    # Поступления — outside Studio entirely.
-    UUID("b66cc603-0bf2-4010-a602-a871f56d3e66"):
-        GroupConfig("none", "instance", "any"),
+    # Поступления — outside Studio entirely. Owner = tracking number (arrival):
+    # один коллаж на трек, создаётся ТОЛЬКО через PUT /arrivals/{tn} (delivery
+    # backend), не через generic POST /collages. Видео-доказательства разрешены.
+    ARRIVALS_GROUP_ID:
+        GroupConfig("none", "arrival", "any", allows_video=True),
     # Реальные фотографии — instance, source-only; принимает ЛЮБОЕ состояние
     # (new/personal/defect), бейджи различают. Бывшая «Дефектные фотографии»
     # влита сюда. Куда грузить видео — тоже сюда.
