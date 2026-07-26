@@ -124,7 +124,7 @@ export default function Sidebar({
           <span className={s.name}>Studio</span>
         </Link>
         <Link
-          href="/watermark"
+          href="/design"
           className={s.item}
           onClick={onCloseMobile}
         >
@@ -133,7 +133,7 @@ export default function Sidebar({
             <path d="M7 13c1.2 0 1.2 1.5 2.4 1.5s1.2-1.5 2.4-1.5 1.2 1.5 2.4 1.5 1.2-1.5 2.4-1.5" />
             <path d="M7 9.5h6" />
           </svg>
-          <span className={s.name}>Вотермарк</span>
+          <span className={s.name}>Оформление</span>
         </Link>
 
         <div className={s.spacer} />

@@ -245,6 +245,49 @@ export interface WatermarkConfig {
   groups: WatermarkGroupState[];
 }
 
+// ─── Catalog backgrounds ─────────────────────────────────────────────────
+
+export interface BackgroundCoverage {
+  asset: StudioAsset;
+  done: number;
+  /** pending + running */
+  pending: number;
+  failed: number;
+}
+
+export interface BackgroundsOverview {
+  active_id: string | null;
+  /** Photos in the background set (bg_set = true). */
+  set_total: number;
+  items: BackgroundCoverage[];
+}
+
+export interface BgGenerateResult {
+  enqueued: number;
+  rearmed_failed: number;
+  already_done: number;
+}
+
+export type BgVersionState = "running" | "failed" | "pending" | "missing" | "done";
+
+export interface BgPhotoState {
+  photo_id: string;
+  collage_id: string;
+  collage_title: string | null;
+  standing: boolean;
+  state: BgVersionState;
+  attempts: number;
+  error: string | null;
+  thumb_url: string;
+  version_url: string | null;
+}
+
+export interface BgPhotoFlags {
+  photo_id: string;
+  in_set: boolean;
+  standing: boolean;
+}
+
 // ─── Photo gaps ───────────────────────────────────────────────────────────
 
 export type GapKind = "reference" | "personal" | "defect";

@@ -1,4 +1,8 @@
 import type {
+  BackgroundsOverview,
+  BgGenerateResult,
+  BgPhotoFlags,
+  BgPhotoState,
   Collage,
   CollageDetail,
   GapCounts,
@@ -270,6 +274,33 @@ export const api = {
       req<WatermarkGroupState>(`/watermark/groups/${groupId}`, {
         method: "PUT",
         body: JSON.stringify({ enabled }),
+      }),
+  },
+  backgrounds: {
+    overview: () => req<BackgroundsOverview>("/backgrounds/overview"),
+    setActive: (backgroundId: string | null) =>
+      req<BackgroundsOverview>("/backgrounds/active", {
+        method: "PUT",
+        body: JSON.stringify({ background_id: backgroundId }),
+      }),
+    generate: (backgroundId: string) =>
+      req<BgGenerateResult>(`/backgrounds/${backgroundId}/generate`, {
+        method: "POST",
+      }),
+    regeneratePhoto: (backgroundId: string, photoId: string) =>
+      req<BgGenerateResult>(
+        `/backgrounds/${backgroundId}/photos/${photoId}/generate`,
+        { method: "POST" },
+      ),
+    photoStates: (backgroundId: string) =>
+      req<BgPhotoState[]>(`/backgrounds/${backgroundId}/photos`),
+    setPhotoFlags: (
+      photoId: string,
+      flags: { in_set?: boolean; standing?: boolean },
+    ) =>
+      req<BgPhotoFlags>(`/photos/${photoId}/bg-flags`, {
+        method: "PUT",
+        body: JSON.stringify(flags),
       }),
   },
 };

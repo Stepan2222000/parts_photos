@@ -6,6 +6,8 @@ from uuid import UUID, uuid4
 import asyncpg
 from fastapi import APIRouter, HTTPException, Query
 
+from .. import bg
+from .. import bg
 from .. import watermark as wm
 from ..db import pool
 from ..minio_client import public_url
@@ -162,6 +164,7 @@ async def _query_collages(
     """
     rows = await pool().fetch(sql, *params)
     wm_on = await wm.wm_active()
+    bg_ov = await bg.overrides_for([r["first_photo_id"] for r in rows])
 
     collages = [
         Collage(
@@ -173,7 +176,9 @@ async def _query_collages(
             created_at=r["created_at"],
             photos_count=r["photos_count"],
             first_photo_url=wm.photo_url(
-                r["first_photo_id"], r["first_key"], None,
+                r["first_photo_id"],
+                bg_ov.get(r["first_photo_id"], r["first_key"]),
+                None,
                 wm_enabled=wm_on and r["wm_enabled"],
             ) if r["first_key"] else None,
             owner_name=r["owner_name"],
@@ -298,9 +303,11 @@ async def get_collage(collage_id: UUID) -> CollageDetail:
         collage_id,
     )
 
+    bg_ov = await bg.overrides_for([r["id"] for r in photo_rows])
     photos = [
         Photo(**dict(r), url=wm.photo_url(
-            r["id"], r["s3_key"], r["mime"], wm_enabled=wm_enabled,
+            r["id"], bg_ov.get(r["id"], r["s3_key"]), r["mime"],
+            wm_enabled=wm_enabled,
         ))
         for r in photo_rows
     ]

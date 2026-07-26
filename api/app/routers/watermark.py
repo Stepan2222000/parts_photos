@@ -27,6 +27,7 @@ from ..studio import groups as gconfig
 from ..studio.schemas import StudioAsset
 from ..studio.storage import studio_bucket
 from ..config import settings
+from .. import bg
 from .. import watermark as wm
 from .studio import _row_to_asset
 
@@ -166,11 +167,16 @@ async def watermarked_photo(photo_id: UUID, request: Request) -> Response:
     if (row["mime"] or "").startswith("video/"):
         raise HTTPException(400, "Watermark endpoint serves images only")
 
+    # The active-background version (when present) is what the catalog shows —
+    # the mark goes on top of it, not on the base object.
+    bg_ov = await bg.overrides_for([photo_id])
+    base_key = bg_ov.get(photo_id, row["s3_key"])
+
     # Flag off or no active mark — stale URL, hand back the clean object.
     if not row["watermark_enabled"] or row["wm_key"] is None:
-        return RedirectResponse(public_url(row["s3_key"]), status_code=307)
+        return RedirectResponse(public_url(base_key), status_code=307)
 
-    etag = wm.etag_for(row["s3_key"], row["wm_key"])
+    etag = wm.etag_for(base_key, row["wm_key"])
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304)
 
@@ -181,7 +187,7 @@ async def watermarked_photo(photo_id: UUID, request: Request) -> Response:
         lambda: _get_object_bytes(studio_bucket(), wm_key),
     )
     base_bytes = await asyncio.to_thread(
-        _get_object_bytes, settings.minio_bucket, row["s3_key"]
+        _get_object_bytes, settings.minio_bucket, base_key
     )
     out = await asyncio.to_thread(wm.apply_watermark, base_bytes, wm_bytes)
 

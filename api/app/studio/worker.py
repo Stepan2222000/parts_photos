@@ -28,6 +28,7 @@ from studio_core.options import OptionKey
 
 from ..config import settings
 from ..db import close_pool, init_pool, pool
+from . import bg_worker
 from .article_match_db import find_matches
 from .storage import fetch_to, put_bytes, studio_bucket
 
@@ -387,21 +388,63 @@ async def main_loop() -> None:
             pass
 
     in_flight: set[asyncio.Task] = set()
+    bg_active = [0]  # background-version lane occupancy (list = mutable closure)
+    claim_failures = 0
+
+    await bg_worker.recover_stuck()
 
     try:
         while not stop.is_set():
-            # Try to launch as many jobs as the adaptive pool allows
+            # Try to launch as many jobs as the adaptive pool allows.
+            # A dropped DB connection during a claim must not kill the loop —
+            # skip the tick and retry after the poll interval.
             launched_any = False
-            while ad_pool.active < ad_pool.target and not stop.is_set():
-                async with pool().acquire() as conn:
-                    job = await claim_one(conn)
-                if job is None:
-                    break
-                await ad_pool.acquire()
-                t = asyncio.create_task(_wrap_job(job, work_root, ad_pool, client))
-                in_flight.add(t)
-                t.add_done_callback(in_flight.discard)
-                launched_any = True
+            try:
+                while ad_pool.active < ad_pool.target and not stop.is_set():
+                    # acquire timeout: a wedged pool must raise, not hang the
+                    # loop forever (seen with a flaky uplink to the DB).
+                    async with pool().acquire(timeout=30) as conn:
+                        job = await claim_one(conn)
+                    if job is None:
+                        break
+                    await ad_pool.acquire()
+                    t = asyncio.create_task(_wrap_job(job, work_root, ad_pool, client))
+                    in_flight.add(t)
+                    t.add_done_callback(in_flight.discard)
+                    launched_any = True
+
+                # Background-version lane: batch work yields to interactive
+                # studio jobs (same single-account gateway) — it only runs when
+                # the studio queue is idle, and never above its own low cap.
+                while (
+                    ad_pool.active == 0
+                    and bg_active[0] < bg_worker.MAX_CONCURRENCY
+                    and not stop.is_set()
+                ):
+                    async with pool().acquire(timeout=30) as conn:
+                        bg_job = await bg_worker.claim_one(conn)
+                    if bg_job is None:
+                        break
+                    bg_active[0] += 1
+                    t = asyncio.create_task(
+                        _wrap_bg_job(bg_job, work_root, client, bg_active)
+                    )
+                    in_flight.add(t)
+                    t.add_done_callback(in_flight.discard)
+                    launched_any = True
+                claim_failures = 0
+            except Exception:
+                claim_failures += 1
+                logger.exception(
+                    "claim tick failed (%d in a row), retrying", claim_failures
+                )
+                launched_any = False
+                # A poisoned pool never recovers in-process — die and let the
+                # supervisor (restart loop / docker restart policy) start us
+                # fresh with a clean pool.
+                if claim_failures >= 10:
+                    logger.error("claim failures piled up — exiting for a clean restart")
+                    raise
 
             if not launched_any:
                 try:
@@ -411,7 +454,8 @@ async def main_loop() -> None:
 
         if in_flight:
             logger.info("waiting for %d in-flight jobs to finish...", len(in_flight))
-            await asyncio.gather(*in_flight, return_exceptions=True)
+            # Bounded: a job hung on a dead socket must not wedge shutdown.
+            await asyncio.wait(in_flight, timeout=120)
     finally:
         await client.close()
         await close_pool()
@@ -419,13 +463,44 @@ async def main_loop() -> None:
         logger.info("studio worker stopped")
 
 
+# Hard per-task ceiling: the image call has its own timeout, but a socket that
+# dies mid-request can hang past it and pin a concurrency slot forever (seen
+# 2026-07-26: two zombie tasks froze the bg lane for 9 hours). The ceiling
+# cancels the task and returns the job to its queue.
+def _task_ceiling() -> float:
+    return settings.studio_image_timeout_seconds + 300
+
+
 async def _wrap_job(
     job: dict, work_root: Path, ad_pool: AdaptivePool, client: AsyncOpenAI
 ) -> None:
     try:
-        await run_one_job(job, work_root, ad_pool, client)
+        try:
+            await asyncio.wait_for(
+                run_one_job(job, work_root, ad_pool, client), timeout=_task_ceiling()
+            )
+        except asyncio.TimeoutError:
+            logger.error("studio job %s hit the hard ceiling — failing it", job["id"])
+            await fail_job(job["id"], "hard timeout: task hung and was cancelled")
     finally:
         await ad_pool.release()
+
+
+async def _wrap_bg_job(
+    job: dict, work_root: Path, client: AsyncOpenAI, bg_active: list[int]
+) -> None:
+    try:
+        try:
+            await asyncio.wait_for(
+                bg_worker.run_one(job, work_root, client), timeout=_task_ceiling()
+            )
+        except asyncio.TimeoutError:
+            logger.error("bg job %s hit the hard ceiling — rescheduling", job["id"])
+            await bg_worker._reschedule(
+                job["id"], job["attempts"], "hard timeout: task hung and was cancelled"
+            )
+    finally:
+        bg_active[0] -= 1
 
 
 def run() -> None:
